@@ -1,0 +1,234 @@
+name: CD Pipeline - Deploy to Render
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline with SonarQube"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  DOCKER_IMAGE: tienbui482/social-app:latest
+  RENDER_API_URL: https://api.render.com/v1
+
+jobs:
+  deploy-to-render:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get deployment info
+        id: deployment-info
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set environment variables
+        run: |
+          if [ "${{ inputs.environment }}" == "staging" ] || [ "${{ steps.deployment-info.outputs.branch }}" != "main" ]; then
+            echo "RENDER_SERVICE_ID=${{ secrets.RENDER_STAGING_SERVICE_ID }}" >> $GITHUB_ENV
+            echo "APP_URL=${{ secrets.STAGING_APP_URL }}" >> $GITHUB_ENV
+            echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+          else
+            echo "RENDER_SERVICE_ID=${{ secrets.RENDER_PRODUCTION_SERVICE_ID }}" >> $GITHUB_ENV
+            echo "APP_URL=${{ secrets.PRODUCTION_APP_URL }}" >> $GITHUB_ENV
+            echo "ENVIRONMENT=production" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy to Render
+        id: deploy
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          echo "🚀 Deploying to Render (${{ env.ENVIRONMENT }})..."
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ env.RENDER_API_URL }}/services/${{ env.RENDER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "clearCache": "clear",
+              "imageUrl": "${{ env.DOCKER_IMAGE }}:${{ steps.deployment-info.outputs.sha }}"
+            }')
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          if [ "$http_code" -eq 201 ] || [ "$http_code" -eq 200 ]; then
+            echo "✅ Deploy request accepted"
+            deploy_id=$(echo "$body" | jq -r '.id')
+            echo "deploy_id=$deploy_id" >> $GITHUB_OUTPUT
+            echo "Deploy ID: $deploy_id"
+          else
+            echo "❌ Deploy request failed with status $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+      - name: Wait for deployment to complete
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          echo "⏳ Waiting for deployment to complete..."
+          max_attempts=30
+          attempt=0
+          
+          while [ $attempt -lt $max_attempts ]; do
+            sleep 20
+            attempt=$((attempt + 1))
+          
+            status=$(curl -s \
+              "${{ env.RENDER_API_URL }}/services/${{ env.RENDER_SERVICE_ID }}/deploys/${{ steps.deploy.outputs.deploy_id }}" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.status')
+          
+            echo "Attempt $attempt/$max_attempts - Status: $status"
+          
+            if [ "$status" == "live" ]; then
+              echo "✅ Deployment completed successfully!"
+              exit 0
+            elif [ "$status" == "build_failed" ] || [ "$status" == "deactivated" ]; then
+              echo "❌ Deployment failed with status: $status"
+              exit 1
+            fi
+          done
+          
+          echo "⚠️ Deployment timeout after 10 minutes"
+          exit 1
+
+      - name: Health check
+        run: |
+          echo "🏥 Running health check..."
+          max_attempts=10
+          attempt=0
+          
+          while [ $attempt -lt $max_attempts ]; do
+            sleep 5
+            attempt=$((attempt + 1))
+          
+            response=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.APP_URL }}/health || echo "000")
+          
+            echo "Health check attempt $attempt/$max_attempts - Status: $response"
+          
+            if [ "$response" == "200" ]; then
+              echo "✅ Application is healthy!"
+              exit 0
+            fi
+          done
+          
+          echo "❌ Health check failed"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+          
+          # Test 1: Homepage
+          status=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.APP_URL }})
+          if [ "$status" != "200" ]; then
+            echo "❌ Homepage test failed"
+            exit 1
+          fi
+          echo "✅ Homepage test passed"
+          
+          # Test 2: API endpoint (customize based on your app)
+          status=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.APP_URL }}/api/status)
+          if [ "$status" != "200" ] && [ "$status" != "404" ]; then
+            echo "⚠️ API endpoint test warning (status: $status)"
+          else
+            echo "✅ API endpoint test passed"
+          fi
+
+      - name: Get deployment details
+        if: success()
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          echo "📊 Deployment Details:"
+          deploy_info=$(curl -s \
+            "${{ env.RENDER_API_URL }}/services/${{ env.RENDER_SERVICE_ID }}/deploys/${{ steps.deploy.outputs.deploy_id }}" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
+          
+          echo "Deploy ID: $(echo "$deploy_info" | jq -r '.id')"
+          echo "Status: $(echo "$deploy_info" | jq -r '.status')"
+          echo "Created At: $(echo "$deploy_info" | jq -r '.createdAt')"
+          echo "Finished At: $(echo "$deploy_info" | jq -r '.finishedAt')"
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          echo "🔄 Attempting rollback..."
+          
+          # Get previous successful deploy
+          previous_deploy=$(curl -s \
+            "${{ env.RENDER_API_URL }}/services/${{ env.RENDER_SERVICE_ID }}/deploys?limit=10" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | \
+            jq -r '[.[] | select(.status == "live")] | .[1].id')
+          
+          if [ "$previous_deploy" != "null" ] && [ -n "$previous_deploy" ]; then
+            echo "Rolling back to deploy: $previous_deploy"
+            curl -X POST \
+              "${{ env.RENDER_API_URL }}/services/${{ env.RENDER_SERVICE_ID }}/deploys" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"deployId\": \"$previous_deploy\"}"
+            echo "✅ Rollback initiated"
+          else
+            echo "⚠️ No previous deploy found for rollback"
+          fi
+
+  notify:
+    needs: deploy-to-render
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Send deployment notification
+        run: |
+          if [ "${{ needs.deploy-to-render.result }}" == "success" ]; then
+            echo "🎉 Deployment to ${{ needs.deploy-to-render.outputs.environment }} successful!"
+            echo "🔗 URL: ${{ env.APP_URL }}"
+            echo "📦 Image: ${{ env.DOCKER_IMAGE }}:${{ github.sha }}"
+          else
+            echo "❌ Deployment to ${{ needs.deploy-to-render.outputs.environment }} failed!"
+          fi
+          
+          # You can add Slack/Discord/Email notification here
+          # Example:
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{"text": "Deployment notification"}'
+
+      - name: Create GitHub deployment status
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const status = '${{ needs.deploy-to-render.result }}' === 'success' ? 'success' : 'failure';
+            
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: status,
+              description: `Deployment to Render ${status}`,
+              environment_url: process.env.APP_URL
+            });
