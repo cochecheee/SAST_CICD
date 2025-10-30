@@ -15,7 +15,7 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Grant execute permission for gradlew
@@ -34,7 +34,7 @@ jobs:
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@master  # Phiên bản mới nhất
         with:
-          image-ref: 'your-dockerhub-username/your-repo:latest'  # Scan image local
+          image-ref: 'tienbui482/social-app:latest'  # Scan image local
           format: 'sarif'  # Export report SARIF để tích hợp GitHub
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'  # Fail nếu có lỗ hổng cao
