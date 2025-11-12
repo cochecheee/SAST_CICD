@@ -2,10 +2,10 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '2.7.18'
     id 'io.spring.dependency-management' version '1.1.0'
-    // add SonarScanner plugin
-    id "org.sonarqube" version "6.3.1.5724"
-    // dotenv
-    id "io.github.cdimascio.dotenv" version "2.3.2"
+//    // add SonarScanner plugin
+//    id "org.sonarqube" version "6.3.1.5724"
+//    // scan dependency
+//    id 'org.owasp.dependencycheck' version '12.1.0'
 }
 
 group = 'com.nhoclahola'
@@ -13,7 +13,7 @@ version = '0.0.1-SNAPSHOT'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
@@ -28,15 +28,6 @@ configurations {
 
 repositories {
     mavenCentral()
-}
-
-// Add JVM options for Log4Shell exploitation (LAB ONLY!)
-bootRun {
-    jvmArgs = [
-        '-Dcom.sun.jndi.ldap.object.trustURLCodebase=true',
-        '-Dcom.sun.jndi.rmi.object.trustURLCodebase=true',
-        '-Djava.rmi.server.useCodebaseOnly=false'
-    ]
 }
 
 dependencies {
@@ -93,22 +84,6 @@ dependencies {
 
     // MySQL Connector
     runtimeOnly 'com.mysql:mysql-connector-j:8.2.0'
-}
-
-sonarqube {
-    properties {
-        property "sonar.projectKey", "sast-social "           // Key project trên SonarQube
-        property "sonar.projectName", "sast-social"
-        property "sonar.host.url", "http://localhost:9000"    // URL SonarQube server
-        property "sonar.login", System.getenv("SONAR_TOKEN")  // Token bảo mật
-        property "sonar.java.source", "17"                    // Version Java project
-    }
-}
-
-// Load environment variables from .env file
-dotenv {
-    directory = "./"
-    filename = ".env"
 }
 
 tasks.named('test') {

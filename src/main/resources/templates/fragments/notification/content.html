@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="content">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script th:src="@{/js/format_time.js}"></script>
+    <title>Notification Page</title>
+    <style>
+        .notification-container {
+            max-width: 800px; /* Giới hạn chiều ngang của container */
+            margin: 0 auto; /* Canh giữa */
+            padding: 15px;
+        }
+
+        .notification-card {
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .notification-card:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+
+        .avatar img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+        }
+
+        .mark-read-btn {
+            color: #00bcd4;
+        }
+    </style>
+</head>
+<body>
+<nav th:replace="~{fragments/mobile_sidebar :: mobile_sidebar}">
+
+</nav>
+<div class="my-2 col-12 col-md-6">
+    <h1 class="font-weight-bold text-center mb-4">Notifications</h1>
+
+    <!-- Notification List -->
+        <div id="notificationContainer" class="list-group">
+            <!-- Notification Item -->
+
+            <!-- More notifications can be added here -->
+
+        </div>
+
+    <!-- Load More Button -->
+    <div id="load-more" class="text-center mt-4">
+        <button class="btn btn-outline-primary">See more notifications</button>
+    </div>
+</div>
+
+<script>
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+<script th:src="@{/js/notification.js}"></script>
+<script>
+    startLoad("/api/notifications/users");
+</script>
+</body>
+</html>

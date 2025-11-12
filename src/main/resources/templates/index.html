@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/images/logos/hcmute.png" type="image/png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALOUTE</title>
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}">
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+    <script th:src="@{/js/jquery.min.js}"></script>
+<!--    <link rel="stylesheet" th:href="@{/css/bootstrap-icons.css}">-->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body class="d-none">
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div th:replace="~{fragments/sidebar :: sidebar}">
+
+        </div>
+
+        <!-- HomePage Content -->
+        <div th:replace="~{fragments/home/content :: content}">
+
+        </div>
+
+        <!-- HomeRight Sidebar -->
+        <div th:replace="~{fragments/home_right :: home_right}">
+
+        </div>
+    </div>
+</div>
+</body>
+</html>

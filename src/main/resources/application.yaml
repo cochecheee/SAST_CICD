@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: social-network-v1
+#  datasource:
+#    url: ${DBMS_CONNECTION:jdbc:mariadb://localhost:3306/social_network_v1}
+#    username: root
+#    password: ${MYSQL_ROOT_PASSWORD:}
+#    driver-class-name: org.mariadb.jdbc.Driver
+  datasource:
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/social_network_v1?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_ROOT_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  mvc:
+    servlet:
+      load-on-startup: 1
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: nlg.bao1340@gmail.com
+    password: auvx cvzl lkgx smrc
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+jwt:
+  privateKey: ${JWT_TOKEN:}
+
+cloud:
+  aws:
+    credentials:
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
+    region:
+      static: ${S3_REGION:ap-southeast-2}
+    stack:
+      auto: false
+    buket:
+      name: ${S3_BUCKET_NAME:nhom3-social-network-storage}
+
+server:
+  address: 0.0.0.0
+  port: 8081
+
+cors:
+  allowed:
+    origins: https://social-network-react-js-mosxy6ru7-nhoclaholas-projects.vercel.app, http://localhost:3000, http://localhost:8080, http://localhost:8081, https://social-network-react-js-ui.vercel.app, http://social-network-v1.kesug.com

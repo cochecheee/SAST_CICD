@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Register</title>
+    <link rel="icon" href="/images/logos/hcmute.png" type="image/png">
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}"></head>
+<body>
+<style>
+    body {
+        background-image: url('/images/background.jpg'); /* Đường dẫn đến ảnh */
+        background-size: cover; /* Ảnh phủ kín toàn bộ màn hình */
+        background-position: center; /* Canh giữa ảnh */
+        background-repeat: no-repeat; /* Không lặp lại ảnh */
+        height: fit-content; /* Chiều cao toàn màn hình */
+        margin: 0; /* Xóa margin mặc định của body */
+    }
+
+    .card {
+        background: rgba(255, 255, 255, 0.9); /* Tạo hiệu ứng mờ cho form */
+        border-radius: 8px;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+    }
+</style>
+<div class="container d-flex justify-content-center align-items-center">
+    <div class="card p-4" style="width: 400px;">
+        <a href="/register" class="d-flex justify-content-center align-items-center gap-2">
+            <img th:src="@{/images/logos/hcmute.png}" alt="ALOUTE" class="img-fluid" style="width: 60px;">
+        </a>
+        <h1 class="text-center" style="color: blue;">ALOUTE</h1>
+        <i class="text-center">This is the new social network</i>
+        <form id="registerForm">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" name="username" required>
+                <div class="text-danger" th:if="${registerError}" th:text="${registerError}"></div>
+            </div>
+            <div class="mb-3">
+                <label for="firstName" class="form-label">First Name</label>
+                <input type="text" class="form-control" id="firstName" name="firstName" required>
+            </div>
+            <div class="mb-3">
+                <label for="lastName" class="form-label">Last Name</label>
+                <input type="text" class="form-control" id="lastName" name="lastName" required>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <div class="mb-3">
+                <label for="re-password" class="form-label">Retype Password</label>
+                <input type="password" class="form-control" id="re-password" name="password" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Gender</label>
+                <div>
+                    <input type="radio" name="gender" value="male" id="male">
+                    <label for="male">Male</label>
+                    <input type="radio" name="gender" value="female" id="female">
+                    <label for="female">Female</label>
+                    <input type="radio" name="gender" value="other" id="other">
+                    <label for="other">Other</label>
+                </div>
+            </div>
+            <div id="registerError" class="text-danger text-center mt-3"></div>
+            <button type="submit" class="btn btn-primary w-100">Register</button>
+        </form>
+
+        <div class="text-center mt-3">
+            <p>If you already have an account? <a href="/login">Login</a></p>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="/js/auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="content">
+<head>
+    <meta charset="UTF-8">
+    <title>Content</title>
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}">
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+    <script th:src="@{/js/load_posts.js}"></script>
+    <script th:src="@{/js/load_comments.js}"></script>
+    <script th:src="@{/js/format_time.js}"></script>
+    <script th:src="@{/js/bootstrap.js}"></script>
+
+</head>
+<style>
+    .avatar-act {
+        width: 3.4rem;
+        height: 3.4rem;
+        outline: 2px solid #d1d5db;
+        border-radius: 50%;
+        overflow: hidden;
+    }
+
+    .avatar-act img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    #act-container {
+        min-height: 5rem;
+    }
+
+    /* Nút chung */
+    button {
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .already {
+        fill: red;
+    }
+
+    /* Nút yêu thích */
+    .heart-button:hover .heart-icon {
+        fill: red;
+    }
+
+    .heart-icon {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+    }
+
+    /* Nút trò chuyện */
+    .chat-button:hover .chat-icon {
+        fill: cyan;
+    }
+
+    .chat-icon {
+        width: 24px;
+        height: 24px;
+        /*fill: currentColor;*/
+    }
+
+    /* Hover màu chữ theo kiểu Tailwind */
+    .hover\:text-red-400:hover {
+        color: #f87171; /* Màu đỏ */
+    }
+
+    .hover\:text-cyan-400:hover {
+        color: #22d3ee; /* Màu xanh cyan */
+    }
+</style>
+<body>
+<nav th:replace="~{fragments/mobile_sidebar :: mobile_sidebar}">
+
+</nav>
+<!-- HomePage Content -->
+<div class="col-12 col-md-6">
+
+    <div class="card my-4 shadow">
+        <div id="act-container" class="card p-2 rounded">
+            <div id="user-list" class="d-flex flex-wrap gap-4 px-2"></div>
+            <div id="loading" class="text-center mt-4 d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <!-- Create Post -->
+        <div class="card mb-4 p-3 shadow rounded-3">
+            <div class="d-flex align-items-center gap-4">
+                <img id="createPostUserAvatar" src="/images/unknown_user.jpg" alt="Avatar"
+                     class="rounded-circle mr-3"
+                     style="width: 50px; height: 50px;">
+                <input type="text" class="form-control rounded-4" placeholder="What are you thinking?"
+                       onclick="openPostModal()">
+            </div>
+        </div>
+
+        <!--        <div th:replace="fragments/post/post :: post">-->
+
+        <!--        </div>-->
+        <!-- Posts Feed -->
+        <div id="postContainer">
+
+        </div>
+
+    </div>
+
+    <!-- Chèn modal fragment -->
+    <div th:insert="~{fragments/post/post_modal :: postModal}"></div>
+    <div th:insert="~{fragments/post/comment_modal :: commentModal}"></div>
+    <div th:insert="~{fragments/post/liked_modal :: likedModal}"></div>
+
+    <div th:insert="~{fragments/notification/notification_snackbar :: notificationSnackbar}"></div>
+</div>
+<script>
+    const apiUrl = '/api/users/latest-activity-followings';
+    const userListEl = document.getElementById('user-list');
+    const loadingEl = document.getElementById('loading');
+
+    // Hàm rút gọn username
+    function truncateUsername(username, maxLength) {
+        return username.length > maxLength ? username.substring(0, maxLength) + '...' : username;
+    }
+
+    // Hàm hiển thị danh sách user
+    function renderUsers(users) {
+        userListEl.innerHTML = '';
+        users.forEach(user => {
+            const userCard = document.createElement('a');
+            userCard.href = `/profile/${user.userId}`;
+            userCard.className = 'text-decoration-none text-center';
+            userCard.innerHTML = `
+          <div class="avatar-act mx-auto">
+                <img src="${user.avatarUrl || '/images/unknown_user.jpg'}" alt="avatar">
+          </div>
+          <p class="mt-2">@${truncateUsername(user.username, 5)}</p>
+        `;
+            userListEl.appendChild(userCard);
+        });
+    }
+
+    // Hàm gọi API lấy danh sách user
+    async function fetchUsers() {
+        loadingEl.classList.remove('d-none');
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`, // Thêm token vào header
+                },
+            });
+            const data = await response.json();
+            if (data.responseCode === 1000) {
+                renderUsers(data.result);
+            } else {
+
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        } finally {
+            loadingEl.classList.add('d-none');
+        }
+    }
+
+    // Gọi API khi trang load
+    window.addEventListener('DOMContentLoaded', fetchUsers);
+</script>
+<script>
+    const token = localStorage.getItem('jwt');
+    const myModal = new bootstrap.Modal(document.getElementById('createPostModal'));
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    // Mở modal
+    function openPostModal() {
+        $('#uFirstName').html(user.firstName);
+        $('#uLastName').html(user.lastName);
+        $('#uUsername').html('@' + user.username);
+        if (user.avatarUrl != null)
+            $('#uAvatar').html(document.getElementById('uAvatar').src = user.avatarUrl);
+        myModal.show();
+    }
+
+    // Đóng modal
+    function closePostModal() {
+        myModal.hide();
+    }
+
+    // Gửi bài post
+    function submitPost() {
+        const caption = document.querySelector('#createPostForm textarea').value.trim();
+        const imageFile = document.querySelector('#imageInput').files[0];
+        const videoFile = document.querySelector('#videoInput').files[0];
+        const formData = new FormData();
+
+        // Kiểm tra caption
+        if (!caption) {
+            errorMessage.textContent = 'Caption is required!';
+            errorMessage.classList.remove('d-none');
+            return;
+        } else {
+            errorMessage.classList.add('d-none');
+        }
+
+        // Append dữ liệu
+        formData.append('caption', caption);
+
+        if (imageFile) {
+            formData.append('file', imageFile);
+        } else if (videoFile) {
+            formData.append('file', videoFile);
+        } else {
+            // Gửi giá trị rỗng nếu không có file
+            formData.append('file', new Blob());
+        }
+
+        // // Hiển thị loading spinner
+        // loadingSpinner.classList.remove('d-none');
+        // Hiển thị overlay loading
+        loadingOverlay.classList.remove('d-none');
+
+        // Gửi request
+        fetch('/api/posts', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`, // Thêm token vào header
+            },
+            body: formData,
+        })
+            .then(response => {
+                // Kiểm tra trạng thái response
+                if (!response.ok) {
+                    throw new Error('Failed to create post');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    // Gọi hàm để chèn post mới vào danh sách
+                    addNewPost(data.result);
+
+                    // Làm sạch form
+                    createPostForm.reset();
+                    mediaPreview.innerHTML = ''; // Làm sạch preview
+
+                    // Đóng modal
+                    closePostModal();
+                } else {
+                    errorMessage.textContent = data.message || 'Error occurred!';
+                    errorMessage.classList.remove('d-none');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorMessage.textContent = 'Something went wrong! Please try again.';
+                errorMessage.classList.remove('d-none');
+            })
+            .finally(() => {
+                // // Ẩn loading spinner
+                // loadingSpinner.classList.add('d-none');
+                // Ẩn overlay loading
+                loadingOverlay.classList.add('d-none');
+            });
+    }
+
+    function addNewPost(post) {
+        const postContainer = document.getElementById('postContainer');
+        const newPostHtml = `
+            <div id="${post.postId}" class="card d-flex flex-row p-2 card shadow rounded-3 mb-4">
+                <div class="d-flex ">
+                    <img src="${post.user.avatarUrl ? post.user.avatarUrl : '/images/unknown_user.jpg'}" alt="avatar" class="rounded-circle border-secondary" style="width: 2.5rem; height: 2.5rem; margin: 0.5rem;">
+                </div>
+                <div class="d-flex flex-column w-100">
+                    <div class="d-flex justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="/profile/${post.user.userId}" class="font-weight-bold">
+                                ${post.user.firstName} ${post.user.lastName}
+                            </a>
+                            <span class="text-secondary">@${post.user.username}</span>
+                            <span>·</span>
+                            <span class="text-secondary">${formatDateFromString(post.createdAt)}</span>
+                        </div>
+                        <a href="/posts/${post.postId}" class="fs-5">
+                            <i class="bi bi-arrow-bar-right"></i>
+                        </a>
+                    </div>
+                    <div class="min-h-12">
+                        <p class="text-break">${post.caption}</p>
+                    </div>
+                    ${post.imageUrl ? `<img src="${post.imageUrl}" class="img-fluid rounded border w-100" alt="post image" onclick="event.stopPropagation()">` : ''}
+                    ${post.videoUrl ? `<video class="img-fluid rounded border w-100" controls onclick="event.stopPropagation()">
+                                        <source src="${post.videoUrl}">
+                                        </video>` : ''}
+                    <div class="d-flex justify-content-between mt-2">
+                        <section class="d-flex gap-4">
+                            <!-- Like Button -->
+                            <div class="d-flex align-items-center">
+                                <button
+                                  class="heart-button hover:text-red-400"
+                                  onclick="likePost(event)"
+                                  type="button"
+                                  tabindex="0"
+                                >
+                                  <svg
+                                    id="btn-${post.postId}"
+                                    class="heart-icon"
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    focusable="false"
+                                    style="${post.liked ? 'fill: red;' : 'fill: black;'}"
+                                  >
+                                    <path
+                                      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"
+                                    ></path>
+                                  </svg>
+                                </button>
+                                <button type="button" class="btn btn-link p-0 text-danger">
+                                    <span id="count-liked-${post.postId}" class="hover-underline cursor-pointer" onclick="openLikedModal('${post.postId}')">0</span>
+                                </button>
+                            </div>
+
+                            <!-- Comment button -->
+                            <div class="d-flex align-items-center">
+                                <button
+                                  title="Like this post"
+                                  class="chat-button hover:text-cyan-400"
+                                  type="button"
+                                  tabindex="0"
+                                >
+                                  <svg
+                                    class="chat-icon"
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    focusable="false"
+                                  >
+                                    <path
+                                      d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2"
+                                    ></path>
+                                  </svg>
+                                </button>
+                                <button type="button" class="btn btn-link p-0 text-info">
+                                    <span id="count-comment-${post.postId}" class="hover-underline cursor-pointer" onclick="handleOpenComment(event)">0</span>
+                                </button>
+                            </div>
+                        </section>
+                        <button onclick="savePost(event)" type="button" class="btn btn-link p-0 text-info">
+                            <i title="${post.saved ? 'Unsave this post' : 'Save this post'}" id="btn-save-${post.postId}" class="bi bi-bookmarks-fill" style="${post.saved ? 'color: blue;' : 'color: black;'}"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        postContainer.insertAdjacentHTML('afterbegin', newPostHtml);
+    }
+</script>
+<script>
+    let commentModal = new bootstrap.Modal(document.getElementById('commentModal'));
+
+    // Mở modal
+    function handleOpenComment(event) {
+        // Lấy phần tử cha của button
+        let targetElement = event.currentTarget;
+        for (let i = 0; i <= 5; i++) {
+            targetElement = targetElement.parentNode;
+        }
+
+        let createCommentButton = document.getElementById('create-comment-button');
+        if (createCommentButton)
+            createCommentButton.remove();
+        createCommentButton = document.createElement('button');
+        createCommentButton.id = 'create-comment-button';
+        createCommentButton.classList.add('btn');
+        createCommentButton.innerHTML = `
+            <i class="bi bi-send text-cyan fs-3"></i>
+        `
+        createCommentButton.addEventListener('click', () => createComment(postId));
+        let createCommentContainer = document.getElementById("create-comment-container");
+        createCommentContainer.appendChild(createCommentButton);
+
+        // Lấy id của phần tử đó
+        const postId = targetElement.id;
+        clearAndAddComment(postId);
+        if (user.avatarUrl != null)
+            $('#userAvatar').html(document.getElementById('userAvatar').src = user.avatarUrl);
+        commentModal.show();
+    }
+
+    // Đóng modal
+    function handleCloseComment() {
+        commentModal.hide();
+    }
+
+    startLoad("api/posts/homepage");
+</script>
+</body>
+</html>

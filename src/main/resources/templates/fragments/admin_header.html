@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="header">
+<head>
+    <style>
+        .sidebar-color {
+            background-color: rgb(6 182 212);
+        }
+        .hover-sidebar-color:hover {
+            background-color: rgb(203 213 225);
+        }
+    </style>
+    <script>
+        let token = localStorage.getItem('jwt');
+        fetch('/api/users/fromToken', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    window.location.href = "/";
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.result.role === 'ADMIN') {
+                    document.body.classList.remove('d-none');
+                    if (data.result.avatarUrl != null)
+                        $('#adminAvatar').html(document.getElementById('adminAvatar').src = data.result.avatarUrl);
+                }
+                else {
+                    alert('You are not administrator');
+                    window.location.href = "/";
+                }
+            })
+            .catch(error => {
+                window.location.href = "/";
+            })
+    </script>
+</head>
+<header>
+    <a href="/">
+        <div class="logo">
+            <img th:src="@{/images/logos/hcmute.png}" alt="Logo">
+            <h3 class="text-decoration-none" style="color: red">ALOUTE</h3>
+        </div>
+    </a>
+    <nav>
+        <ul class="nav-menu">
+            <li><a class="p-3" href="/admin/dashboard" id="dashboard-link">Dashboard</a></li>
+            <li><a class="p-3" href="/admin/manage_user" id="manage-user-link">Manage Users</a></li>
+            <li><a class="p-3" href="/admin/manage_post" id="manage-post-link">Manage Posts</a></li>
+            <li><a id="logoutButton" class="p-3" href="#">Log out</a></li>
+        </ul>
+    </nav>
+    <div class="user-info">
+        <span>Administrator</span>
+        <img id="adminAvatar" src="/images/unknown_user.jpg" alt="avatar" class="rounded-circle mr-3"
+             style="width: 40px; height: 40px;">
+    </div>
+</header>
+<script>
+    const logoutButton = document.getElementById('logoutButton');
+
+    // Thêm sự kiện click
+    logoutButton.addEventListener('click', function () {
+        // Hiển thị hộp thoại xác nhận
+        const confirmed = confirm("Are you sure you want to log out?");
+
+        // Nếu người dùng chọn "OK"
+        if (confirmed) {
+            // Xóa JWT khỏi Local Storage
+            localStorage.removeItem('jwt');
+
+            // Reload lại trang
+            location.reload();
+        }
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+        links = {
+            '/admin/dashboard': 'dashboard-link',
+            '/admin/manage_user': 'manage-user-link',
+            '/admin/manage_post': 'manage-post-link',
+        };
+
+        const currentPath = window.location.pathname;
+        if (links[currentPath]) {
+            const activeLink = document.getElementById(links[currentPath]);
+            if (activeLink) {
+                activeLink.classList.add('sidebar-color');
+            }
+        }
+
+        // Ngăn không cho chuyển hướng nếu đã ở đúng đường dẫn
+        Object.keys(links).forEach(path => {
+            const link = document.getElementById(links[path]);
+            if (link) {
+                link.addEventListener('click', (event) => {
+                    if (window.location.pathname === path) {
+                        event.preventDefault(); // Ngừng chuyển hướng nếu đang ở đúng đường dẫn
+                    }
+                });
+            }
+        });
+    });
+</script>
+</html>

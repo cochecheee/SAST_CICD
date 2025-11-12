@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="sidebar">
+<head>
+    <meta charset="UTF-8">
+    <title>Sidebar</title>
+    <style>
+        .sidebar-color {
+            background-color: rgb(6 182 212);
+        }
+        .hover-sidebar-color:hover {
+            background-color: rgb(203 213 225);
+        }
+    </style>
+</head>
+<body>
+<!-- Sidebar -->
+<div class="col-md-3 d-none d-md-block position-sticky vh-100 px-2" style="top: 0;">
+    <div class="card h-100 d-flex flex-column justify-content-between py-3 shadow rounded-3">
+        <div>
+            <a href="/" class="d-flex justify-content-center align-items-center gap-2">
+                <img th:src="@{/images/logos/hcmute.png}" alt="ALOUTE" class="img-fluid" style="width: 30px;">
+                <span class="fw-bold fw-3 ml-2 text-decoration-none">ALOUTE</span>
+            </a>
+            <div class="mt-4 d-flex flex-column gap-2">
+                <!-- Menu Items -->
+                <a href="/" id="home-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-house-door-fill mr-3"></i>
+                    <span>Home</span>
+                </a>
+                <a href="/videos" id="popular-videos-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-file-play-fill mr-3"></i>
+                    <span>Videos</span>
+                </a>
+                <a href="/search" id="search-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-search mr-3"></i>
+                    <span>Search</span>
+                </a>
+                <a href="/notifications" id="notification-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-bell-fill mr-3"></i>
+                    <span>Notifications</span>
+                    <span class="badge badge-danger ml-auto"></span>
+                </a>
+                <a href="/messages" id="messages-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-chat-right-text-fill mr-3"></i>
+                    <span>Messages</span>
+                    <span class="badge badge-danger ml-auto"></span>
+                </a>
+                <a href="/communities" id="communities-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-back mr-3"></i>
+                    <span>Communities</span>
+                    <span class="badge badge-danger ml-auto"></span>
+                </a>
+                <a href="/profile/me" id="profile-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded">
+                    <i class="bi bi-person-circle mr-3"></i>
+                    <span>Profile</span>
+                    <span class="badge badge-danger ml-auto"></span>
+                </a>
+                <a href="/admin/dashboard" id="admin-link" class="d-flex px-3 hover-sidebar-color fs-5 gap-2 align-items-center py-2 text-decoration-none text-dark rounded d-none">
+                    <i class="bi bi-database-fill mr-3"></i>
+                    <span>Administrator</span>
+                    <span class="badge badge-danger ml-auto"></span>
+                </a>
+                <!-- Add other menu items here -->
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-3 px-3">
+            <div class="d-flex align-items-center gap-2">
+                <img id="avatar" src="/images/unknown_user.jpg" alt="Avatar" class="rounded-circle mr-3"
+                     style="width: 40px; height: 40px;">
+                <div>
+                    <strong id="firstName"></strong>
+                    <strong id="lastName"></strong>
+                    <p id="username" class="text-muted mb-0">@</p>
+                </div>
+            </div>
+            <button title="Logout" class="btn btn-link p-0" id="logoutButton">
+                <i class="bi bi-box-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+    const logoutButton = document.getElementById('logoutButton');
+
+    // Thêm sự kiện click
+    logoutButton.addEventListener('click', function () {
+        // Hiển thị hộp thoại xác nhận
+        const confirmed = confirm("Are you sure you want to log out?");
+
+        // Nếu người dùng chọn "OK"
+        if (confirmed) {
+            // Xóa JWT khỏi Local Storage
+            localStorage.removeItem('jwt');
+
+            // Reload lại trang
+            location.reload();
+        }
+    });
+    let links;
+    document.addEventListener('DOMContentLoaded', () => {
+        links = {
+            '/': 'home-link',
+            '/videos': 'popular-videos-link',
+            '/search': 'search-link',
+            '/notifications': 'notification-link',
+            '/messages': 'messages-link',
+            '/communities': 'communities-link',
+            '/profile/me': 'profile-link',
+        };
+
+        const currentPath = window.location.pathname;
+        if (links[currentPath]) {
+            const activeLink = document.getElementById(links[currentPath]);
+            if (activeLink) {
+                activeLink.classList.add('sidebar-color');
+            }
+        }
+
+        // Ngăn không cho chuyển hướng nếu đã ở đúng đường dẫn
+        Object.keys(links).forEach(path => {
+            const link = document.getElementById(links[path]);
+            if (link) {
+                link.addEventListener('click', (event) => {
+                    if (window.location.pathname === path) {
+                        event.preventDefault(); // Ngừng chuyển hướng nếu đang ở đúng đường dẫn
+                    }
+                });
+            }
+        });
+    });
+</script>
+<script src="/js/main.js"></script>
+</body>
+</html>

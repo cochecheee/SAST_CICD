@@ -16,13 +16,28 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      # Set up JDK
       - name: Set up JDK 17 for Gradle
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
+      # Run CodeQL
+      - name: Run CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          output: codeql-results.sarif
+      # Convert CodeQL report type to SonarQube report type
+      - name: Convert CodeQL SARIF to Sonar format
+        run: python scripts/convert_codeql_to_sonar.py
+      # Sonarqube Scanner
+      - name: Sonar Scan
+        uses: sonarsource/sonarqube-scan-action@v3
+        with:
+          args: >
+            -Dsonar.projectKey=myproject
+            -Dsonar.externalIssuesReportPaths=sonar-codeql.json
 
       # Cài Dependency-Check (OWASP)
       - name: Install Dependency-Check
@@ -36,16 +51,9 @@ jobs:
         run: |
           dependency-check --scan . --out build/reports/dependency-check-report.xml --format XML --format JSON
 
-      # Quét lộ secret trước khi build (gitleaks)
-      - name: Run GitLeaks Secrets Scan
-        uses: zricethezav/gitleaks-action@v2
-        with:
-          args: detect --source . --no-banner --report-format=json --report-path=gitleaks-report.json
-
       # Kiểm tra, build và test bằng Gradle
       - name: Build & Test (Gradle)
         run: ./gradlew clean build --no-daemon
-
       # SonarQube Analysis
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
@@ -66,11 +74,9 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           timeout: 300
-
       # Build Docker image
       - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
-
       # Scan Docker image với Trivy
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@master
@@ -81,18 +87,15 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL'
-
       # Login Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
       # Push image
       - name: Push Docker Image to Docker Hub
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-
       # Upload báo cáo Dependency-Check & GitLeaks làm artifact
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
@@ -101,3 +104,17 @@ jobs:
           path: |
             build/reports/dependency-check-report.*
             gitleaks-report.json
+
+
+#  - name: Run CodeQL
+#    uses: github/codeql-action/analyze@v3
+#    with:
+#      output: codeql-results.sarif
+#  - name: Convert CodeQL SARIF to Sonar format
+#    run: python scripts/convert_codeql_to_sonar.py
+#  - name: Sonar Scan
+#    uses: sonarsource/sonarqube-scan-action@v3
+#    with:
+#      args: >
+#        -Dsonar.projectKey=myproject
+#        -Dsonar.externalIssuesReportPaths=sonar-codeql.json

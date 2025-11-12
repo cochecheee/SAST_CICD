@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="content">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Page</title>
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}">
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+    <script th:src="@{/js/profile.js}"></script>
+    <script th:src="@{/js/load_posts_in_profile.js}"></script>
+    <script th:src="@{/js/load_comments.js}"></script>
+    <script th:src="@{/js/format_time.js}"></script>
+    <script th:src="@{/js/bootstrap.js}"></script>
+    <style>
+        .profile-cover {
+            height: 15rem;
+            background-color: #cbd5e1;
+            position: relative;
+            overflow: hidden; /* Đảm bảo các phần tử không tràn ra ngoài */
+        }
+
+        .profile-avatar {
+            width: 10rem;
+            height: 10rem;
+            border: 4px solid #e2e8f0;
+            position: absolute;
+            bottom: 1rem; /* Căn chỉnh avatar bên dưới cover */
+            left: 1rem;
+            background-color: #fff; /* Màu nền đảm bảo hiển thị rõ avatar */
+        }
+
+        .btn-circle {
+            border-radius: 50px;
+        }
+
+        .save-cancel-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 10px;
+        }
+
+        .profile-avatar-label {
+            position: absolute;
+            bottom: 2rem; /* Đặt nút chỉnh sửa ngay dưới avatar */
+            left: 10rem; /* Căn chỉnh nút ở giữa avatar */
+            transform: translateX(-50%);
+        }
+
+        /* Lớp phủ tối */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Màu tối với độ trong suốt */
+            z-index: 9998; /* Đảm bảo nó nằm dưới vòng tròn loading */
+        }
+
+        /* Vòng tròn loading */
+        #loading-spinner {
+            z-index: 9999;
+        }
+
+        /* Chặn tất cả các tương tác phía sau khi loading */
+        body[style*="pointer-events: none;"] {
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+<!--<nav th:replace="~{fragments/mobile_sidebar :: mobile_sidebar}">-->
+
+<!--</nav>-->
+<div class="container my-2 col-12 col-md-6">
+    <!-- Cover photo -->
+    <div class="profile-cover position-relative">
+        <img id="uCover" src="/images/blank_background.jpg" class="img-fluid w-100 h-100" alt="Cover Photo">
+
+        <!-- Nút đổi cover -->
+        <label for="cover-input" class="btn btn-light border btn-sm position-absolute bottom-0 end-0 m-2">
+            Change Cover
+        </label>
+        <input type="file" accept="image/*" id="cover-input" class="d-none">
+
+        <!-- Nút Save/Cancel -->
+        <div class="save-cancel-btn">
+            <button id="cancel-cover" class="btn btn-outline-danger btn-sm d-none">Cancel</button>
+            <button id="save-cover" class="btn btn-outline-primary btn-sm d-none">Save</button>
+        </div>
+    </div>
+
+    <!-- Avatar -->
+    <div class="position-relative">
+        <img id="uAvatar" src="/images/unknown_user.jpg" alt="Avatar" class="rounded-circle profile-avatar">
+        <label for="avatar-input" class="btn btn-light border btn-sm profile-avatar-label">
+            <i class="bi bi-camera"></i>
+        </label>
+        <input type="file" accept="image/*" id="avatar-input" class="d-none">
+        <div class="mt-5 d-flex justify-content-end ms-auto gap-2">
+            <button id="cancel-avatar" class="btn btn-outline-danger btn-circle btn-sm d-none">Cancel</button>
+            <button id="save-avatar" class="btn btn-outline-success btn-circle btn-sm d-none">Save Avatar</button>
+            <button class="btn btn-outline-primary btn-circle btn-sm" onclick="openEditProfileModal()">Edit Profile</button>
+        </div>
+    </div>
+
+
+    <!-- User Info -->
+    <div class="mt-xl-5">
+        <h1 class="h4 fw-bold">
+            <strong id="uFirstName"></strong>
+            <strong id="uLastName"></strong>
+        </h1>
+        <p id="uUsername" class="text-muted"></p>
+        <div class="d-flex gap-2">
+            <span id="uPosts"></span>
+            <a role="button" id="uFollowers" class="text-decoration-none fw-bold"></a>
+            <a role="button" id="uFollowings" class="text-decoration-none fw-bold"></a>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mt-4">
+        <li id="post-tab" class="nav-item">
+            <a class="nav-link active" href="#posts" data-bs-toggle="tab">Posts</a>
+        </li>
+        <li id="video-tab" class="nav-item">
+            <a class="nav-link" href="#videos" data-bs-toggle="tab">Videos</a>
+        </li>
+        <li id="saved-tab" class="nav-item">
+            <a class="nav-link" href="#saved" data-bs-toggle="tab">Saved</a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content mt-3">
+        <div class="tab-pane fade show active" id="posts">
+        </div>
+        <div class="tab-pane fade" id="videos">
+        </div>
+        <div class="tab-pane fade" id="saved">
+        </div>
+        <div id="postContainer">
+
+        </div>
+    </div>
+
+    <!-- Lớp phủ tối -->
+    <div id="overlay" class="overlay d-none"></div>
+
+    <!-- Vòng tròn loading -->
+    <div id="loading-spinner" class="position-fixed top-50 start-50 translate-middle d-none">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div th:insert="~{fragments/profile/edit_profile_modal :: editProfileModal}"></div>
+    <div th:insert="~{fragments/post/comment_modal :: commentModal}"></div>
+    <div th:insert="~{fragments/post/liked_modal :: likedModal}"></div>
+    <div th:insert="~{fragments/profile/followers_modal :: followersModal}"></div>
+    <div th:insert="~{fragments/profile/followings_modal :: followingsModal}"></div>
+
+    <div th:insert="~{fragments/notification/notification_snackbar :: notificationSnackbar}"></div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Thay đổi ảnh cover
+        const coverInput = document.getElementById('cover-input');
+        const coverImage = document.getElementById('uCover');
+        coverInput.addEventListener('change', () => {
+            const file = coverInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    coverImage.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Thay đổi ảnh avatar
+        const avatarInput = document.getElementById('avatar-input');
+        const avatarImage = document.getElementById('uAvatar');
+        avatarInput.addEventListener('change', () => {
+            const file = avatarInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    avatarImage.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const coverInput = document.getElementById('cover-input');
+        const avatarInput = document.getElementById('avatar-input');
+
+        const coverImage = document.getElementById('uCover');
+        const avatarImage = document.getElementById('uAvatar');
+
+        const saveCoverBtn = document.getElementById('save-cover');
+        const saveAvatarBtn = document.getElementById('save-avatar');
+        const cancelCoverBtn = document.getElementById('cancel-cover');
+        const cancelAvatarBtn = document.getElementById('cancel-avatar');
+
+        const loadingSpinner = document.getElementById('loading-spinner'); // Vòng tròn loading
+        const overlay = document.getElementById('overlay'); // Lớp phủ tối
+        const body = document.body; // Lấy body để khóa giao diện
+
+        // Hiển thị/ẩn vòng tròn loading và lớp phủ tối
+        const toggleLoading = (isLoading) => {
+            if (isLoading) {
+                loadingSpinner.classList.remove('d-none');
+                overlay.classList.remove('d-none');
+                body.style.pointerEvents = 'none'; // Khóa tương tác với giao diện
+            } else {
+                loadingSpinner.classList.add('d-none');
+                overlay.classList.add('d-none');
+                body.style.pointerEvents = 'auto'; // Mở lại tương tác với giao diện
+            }
+        };
+
+        // Hàm để hiển thị các nút Save/Cancel
+        const showSaveCancelBtns = (isCover) => {
+            if (isCover) {
+                saveCoverBtn.classList.remove('d-none');
+                cancelCoverBtn.classList.remove('d-none');
+            } else {
+                saveAvatarBtn.classList.remove('d-none');
+                cancelAvatarBtn.classList.remove('d-none');
+            }
+        };
+
+        // Hàm để ẩn các nút Save/Cancel
+        const hideSaveCancelBtns = (isCover) => {
+            if (isCover) {
+                saveCoverBtn.classList.add('d-none');
+                cancelCoverBtn.classList.add('d-none');
+            } else {
+                saveAvatarBtn.classList.add('d-none');
+                cancelAvatarBtn.classList.add('d-none');
+            }
+        };
+
+        // Thay đổi ảnh cover
+        coverInput.addEventListener('change', () => {
+            const file = coverInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    coverImage.src = e.target.result; // Thay đổi ảnh cover
+                    showSaveCancelBtns(true); // Hiển thị các nút Save/Cancel cho cover
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Thay đổi ảnh avatar
+        avatarInput.addEventListener('change', () => {
+            const file = avatarInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    avatarImage.src = e.target.result; // Thay đổi ảnh avatar
+                    showSaveCancelBtns(false); // Hiển thị các nút Save/Cancel cho avatar
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Hành động khi nhấn Cancel cho cover
+        cancelCoverBtn.addEventListener('click', () => {
+            coverImage.src = user.coverPhotoUrl || '/images/blank_background.jpg'; // Đặt lại ảnh cover ban đầu
+            hideSaveCancelBtns(true); // Ẩn các nút Save/Cancel cho cover
+        });
+
+        // Hành động khi nhấn Cancel cho avatar
+        cancelAvatarBtn.addEventListener('click', () => {
+            avatarImage.src = user.avatarUrl || '/images/unknown_user.jpg'; // Đặt lại ảnh avatar ban đầu
+            hideSaveCancelBtns(false); // Ẩn các nút Save/Cancel cho avatar
+        });
+
+        // Lưu avatar
+        saveAvatarBtn.addEventListener('click', async () => {
+            const file = avatarInput.files[0];
+            if (!file) {
+                alert('Please select an avatar image!');
+                return;
+            }
+
+            const token = localStorage.getItem('jwt');
+            if (!token) {
+                alert('Authentication token not found. Please log in again.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                toggleLoading(true); // Hiển thị vòng tròn loading và lớp phủ tối
+                const response = await fetch('/api/users/avatar', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to update avatar: ${error.message || 'Unknown error'}`);
+                }
+            } catch (err) {
+                console.error('Error while updating avatar:', err);
+                alert('An error occurred. Please try again later.');
+            } finally {
+                toggleLoading(false);
+            }
+        });
+
+        // Lưu cover
+        saveCoverBtn.addEventListener('click', async () => {
+            const file = coverInput.files[0];
+            if (!file) {
+                alert('Please select a cover image!');
+                return;
+            }
+
+            const token = localStorage.getItem('jwt');
+            if (!token) {
+                alert('Authentication token not found. Please log in again.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                toggleLoading(true); // Hiển thị vòng tròn loading và lớp phủ tối
+                const response = await fetch('/api/users/cover', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to update cover: ${error.message || 'Unknown error'}`);
+                }
+            } catch (err) {
+                console.error('Error while updating cover:', err);
+                alert('An error occurred. Please try again later.');
+            } finally {
+                toggleLoading(false);
+            }
+        });
+    });
+</script>
+<script>
+    const myEditProfileModal = new bootstrap.Modal(document.getElementById('editProfileModal'));
+    function openEditProfileModal() {
+        document.getElementById('firstNameInput').value = user.firstName;
+        document.getElementById('lastNameInput').value = user.lastName;
+        myEditProfileModal.show();
+    }
+
+    function closeEditProfileModal() {
+        myEditProfileModal.hide();
+        document.getElementById('error-message').textContent = ''; // Clear error message
+    }
+</script>
+
+<script>
+    const postTab = document.getElementById('post-tab');
+    const videoTab = document.getElementById('video-tab');
+    const savedTab = document.getElementById('saved-tab');
+    let token = localStorage.getItem('jwt');
+    const url = window.location.pathname;
+    const userId = url.split('/').pop();
+    postTab.addEventListener('click', () => startLoad(`/api/posts/users/me`));
+    videoTab.addEventListener('click', () => startLoad(`/api/posts/users/videos/me`));
+    savedTab.addEventListener('click', () => startLoad(`/api/posts/users/saved/me`));
+</script>
+
+<script>
+    startLoad(`/api/posts/users/me`);
+</script>
+<script>
+    let commentModal = new bootstrap.Modal(document.getElementById('commentModal'));
+
+    // Mở modal
+    function handleOpenComment(event) {
+        // Lấy phần tử cha của button
+        let targetElement = event.currentTarget;
+        for (let i = 0; i <= 5; i++) {
+            targetElement = targetElement.parentNode;
+        }
+
+        let createCommentButton = document.getElementById('create-comment-button');
+        if (createCommentButton)
+            createCommentButton.remove();
+        createCommentButton = document.createElement('button');
+        createCommentButton.id = 'create-comment-button';
+        createCommentButton.classList.add('btn');
+        createCommentButton.innerHTML = `
+            <i class="bi bi-send text-cyan fs-3"></i>
+        `
+        createCommentButton.addEventListener('click', () => createComment(postId));
+        let createCommentContainer = document.getElementById("create-comment-container");
+        createCommentContainer.appendChild(createCommentButton);
+
+        // Lấy id của phần tử đó
+        const postId = targetElement.id;
+        clearAndAddComment(postId);
+        if (user.avatarUrl != null)
+            $('#userAvatar').html(document.getElementById('userAvatar').src = user.avatarUrl);
+        commentModal.show();
+    }
+
+    // Đóng modal
+    function handleCloseComment() {
+        commentModal.hide();
+    }
+</script>
+</body>
+</html>
