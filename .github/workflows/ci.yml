@@ -12,7 +12,8 @@ jobs:
     permissions:
       actions: read
       contents: read
-      security-events: write
+      # ❌ Bỏ "security-events: write" vì không upload lên GitHub Security tab
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,39 +28,31 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # Initialize CodeQL
+      # Initialize CodeQL (chạy phân tích cục bộ, không upload)
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: java  # hoặc java-kotlin nếu dùng Kotlin
+          languages: java
 
-      # Build project (cần để CodeQL phân tích)
+      # Build project cho CodeQL phân tích
       - name: Build with Gradle
         run: ./gradlew compileJava --no-daemon
 
-      # Perform CodeQL Analysis
-      - name: Perform CodeQL Analysis
+      # Perform CodeQL Analysis (chỉ xuất SARIF ra artifact)
+      - name: Perform CodeQL Analysis (local)
         uses: github/codeql-action/analyze@v3
         with:
+          output: codeql-results.sarif  # ✅ xuất kết quả cục bộ, không upload
           category: "/language:java"
 
-      # Download SARIF file (CodeQL tự tạo)
-      - name: Download CodeQL SARIF
-        uses: actions/github-script@v7
+      # Upload SARIF file làm artifact (để tải về)
+      - name: Upload CodeQL Results
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            const glob = require('@actions/glob');
-            const searchPath = 'codeql-results/**/*.sarif';
-            const globber = await glob.create(searchPath);
-            const files = await globber.glob();
-            if (files.length === 0) throw new Error('No SARIF files found');
-            // Copy the first SARIF file to known name
-            const input = files[0];
-            fs.copyFileSync(input, 'codeql-results.sarif');
-            console.log(`Copied ${input} to codeql-results.sarif`);
+          name: codeql-sarif
+          path: codeql-results.sarif
 
-      # Convert CodeQL SARIF to SonarQube format
+      # Convert CodeQL SARIF to Sonar format (để đưa vào SonarQube)
       - name: Convert CodeQL SARIF to Sonar format
         run: |
           python scripts/convert_codeql_to_sonar.py \
@@ -71,7 +64,6 @@ jobs:
         run: |
           wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.2.0/dependency-check-9.2.0-release.zip
           unzip dependency-check-9.2.0-release.zip
-          export PATH=$PATH:$(pwd)/dependency-check/bin
           echo "$PWD/dependency-check/bin" >> $GITHUB_PATH
 
       # Quét lỗ hổng dependency
@@ -83,7 +75,7 @@ jobs:
       - name: Build & Test (Gradle)
         run: ./gradlew clean build --no-daemon
 
-      # SonarQube Scan (gộp cả các báo cáo)
+      # SonarQube Scan (gộp các báo cáo CodeQL & OWASP)
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v4
         env:
@@ -131,7 +123,7 @@ jobs:
       - name: Push Docker Image to Docker Hub
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
 
-      # Upload báo cáo Security làm artifact
+      # Upload toàn bộ báo cáo Security
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
         with:
@@ -139,3 +131,4 @@ jobs:
           path: |
             build/reports/dependency-check-report.*
             sonar-issues.json
+            codeql-results.sarif
