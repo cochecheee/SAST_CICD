@@ -10,9 +10,6 @@ jobs:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
 
-    # chỉ chạy nếu merge commit đến từ dev
-    if: startsWith(github.event.head_commit.message, 'Merge pull request') && contains(github.event.head_commit.message, 'from dev')
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
