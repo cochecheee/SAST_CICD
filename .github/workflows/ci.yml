@@ -9,9 +9,10 @@ jobs:
   ci:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
-    # permissions:
-    #   contents: write  # Bỏ nếu không cần upload SARIF lên GitHub
-    #   security-events: write  # Bỏ nếu không upload lên GitHub Security tab
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
