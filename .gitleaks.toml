@@ -1,0 +1,28 @@
+# .gitleaks.toml
+# Custom Gitleaks configuration to ignore placeholders in ALL files (global)
+
+title = "Custom Gitleaks Configuration"
+
+# Extend the default gitleaks config (kế thừa rules mặc định, bao gồm curl-auth-header)
+[extend]
+useDefault = true
+
+# Global allowlist: Bỏ qua các placeholder như "YOUR_JWT_TOKEN" trong TẤT CẢ CÁC FILE
+[[allowlists]]
+description = "Ignore placeholder tokens globally (all files)"
+regexTarget = "match"  # Kiểm tra toàn bộ match (không chỉ secret)
+regexes = [
+    '''YOUR_JWT_TOKEN''',  # Bỏ qua chính xác chuỗi này
+    '''DUMMY_TOKEN'''      # Thêm nếu cần bỏ qua placeholder khác
+]
+# Không có paths: Áp dụng cho tất cả file (global ignore)
+stopwords = [ "YOUR_JWT_TOKEN" ]  # Bỏ qua dựa trên từ khóa trong secret
+
+# Allowlist riêng cho rule curl-auth-header (nếu global chưa đủ)
+[[rules]]
+id = "curl-auth-header"  # Extend rule mặc định curl-auth-header
+
+[[rules.allowlists]]
+description = "Ignore placeholders in curl headers globally (all files)"
+regexTarget = "match"
+regexes = [ '''(?i)Authorization: Bearer\s+YOUR_JWT_TOKEN''' ]  # Match pattern curl cụ thể (case-insensitive)

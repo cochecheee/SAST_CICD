@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="likedModal">
+<head>
+    <style>
+        .modal-content {
+            border-radius: 0.6rem;
+            min-height: 16rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .user-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .user-card img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        .load-more {
+            cursor: pointer;
+            color: #0dcaf0;
+            text-align: center;
+        }
+        .load-more:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+<!-- Modal -->
+<div class="modal fade" id="userLikedModal" tabindex="-1" aria-labelledby="userLikedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userLikedModalLabel">List of people who liked this post</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="userList" class="d-flex flex-column gap-2" style="max-height: 60vh; overflow-y: auto;">
+                    <!-- Users will be dynamically added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openLikedModal(postId) {
+        // Initialize modal
+        const modal = new bootstrap.Modal(document.getElementById('userLikedModal'));
+
+        const userList = document.getElementById('userList');
+        userList.innerHTML = ``;
+
+        const API_URL = `/api/posts/${postId}/users/liked`;
+        let users = [];
+        let index = 0;
+        let isEnd = false;
+
+        function fetchUsers() {
+            if (isEnd)
+                return;
+
+            fetch(`${API_URL}?index=${index}`, {
+                headers: {
+                    "Authorization": `Bearer ${localStorage.getItem('jwt')}`
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    const newUsers = data.result.filter(user => !users.some(u => u.userId === user.userId));
+                    if (newUsers.length < 10)
+                        isEnd = true;
+
+                    users = data.result;
+                    renderLikedUsers(users);
+                })
+                .catch(error => {
+                    console.error(error);
+                });
+        }
+
+        function renderLikedUsers(newUsers) {
+            newUsers.forEach(user => {
+                const userCard = document.createElement('div');
+                userCard.className = 'user-card';
+                userCard.innerHTML = `
+          <img src="${user.avatarUrl || '/images/unknown_user.jpg'}" alt="${user.username}">
+          <div>
+            <h6>${user.firstName} ${user.lastName}</h6>
+            <p class="mb-0 text-muted">@${user.username}</p>
+          </div>
+        `;
+                userList.appendChild(userCard);
+            });
+            if (!isEnd) {
+                let loadDiv = document.createElement('div');
+                loadDiv.id = 'loadMoreUser';
+                loadDiv.classList.add('load-more');
+                loadDiv.textContent = 'See more users';
+                userList.appendChild(loadDiv);
+                document.getElementById('loadMoreUser').addEventListener('click', () => {
+                    index += 10;
+                    fetchUsers();
+                });
+            }
+            else {
+                let loadDiv = document.getElementById('loadMoreUser');
+                if (loadDiv)
+                    loadDiv.remove();
+                let noMoreDiv = document.createElement('div');
+                noMoreDiv.id = 'noMoreUser';
+                noMoreDiv.classList.add('d-flex');
+                noMoreDiv.classList.add('justify-content-center')
+                noMoreDiv.innerHTML = `
+                    <i class="fw-bold text-center">There are no more users</i>
+                `
+                userList.appendChild(noMoreDiv);
+            }
+        }
+
+
+        modal.show();
+
+        // Fetch initial users
+        fetchUsers();
+    }
+
+</script>
+</body>
+</html>

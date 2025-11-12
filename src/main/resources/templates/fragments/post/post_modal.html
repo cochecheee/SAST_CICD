@@ -1,0 +1,274 @@
+<!-- post_modal.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="postModal">
+<head>
+    <style>
+        .custom-modal {
+            border-radius: 0.6rem;
+        }
+
+        .custom-avatar img {
+            height: 100%;
+            width: auto;
+            object-fit: cover;
+        }
+
+        .media-preview img, .media-preview video {
+            height: 10rem;
+        }
+
+        .no-size {
+            resize: none;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5); /* Nền mờ */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1050; /* Đảm bảo hiển thị trên modal */
+        }
+    </style>
+</head>
+<body>
+<!-- Modal -->
+<div class="modal fade" id="createPostModal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content custom-modal">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalLabel">Create Post</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createPostForm" onsubmit="return false;">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="custom-avatar rounded-circle me-3" style="width: 50px; height: 50px; overflow: hidden;">
+                            <img id="uAvatar" src="/images/unknown_user.jpg" alt="Avatar">
+                        </div>
+                        <div>
+                            <p class="fw-bold mb-0">
+                                <span id="uFirstName"></span>
+                                <span id="uLastName"></span>
+                            </p>
+                            <p id="uUsername" class="text-muted mb-0"></p>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <textarea maxlength="2000" class="form-control no-size" id="caption" name="caption" rows="4" placeholder="Caption..."></textarea>
+                        <div class="text-danger mt-1 d-none" id="error-message">Error message</div>
+                    </div>
+
+                    <!-- URL Preview Card (SSRF Vulnerability) -->
+                    <div id="urlPreviewCard" class="card mb-3 d-none" style="border: 1px solid #ddd; background: #f8f9fa;">
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <small class="text-muted">
+                                    <i class="bi bi-link-45deg"></i> Link Preview
+                                </small>
+                                <button type="button" class="btn-close btn-sm" onclick="removeUrlPreview()" aria-label="Close"></button>
+                            </div>
+                            <div id="urlPreviewContent" class="mt-2">
+                                <div class="d-flex align-items-center">
+                                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <small class="text-muted">Fetching preview...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 d-flex gap-3">
+                        <div>
+                            <input type="file" class="d-none" id="imageInput" accept="image/*">
+                            <label for="imageInput" class="btn btn-outline-primary">
+                                <i class="bi bi-image"></i> Image
+                            </label>
+                        </div>
+                        <div>
+                            <input type="file" class="d-none" id="videoInput" accept="video/*">
+                            <label for="videoInput" class="btn btn-outline-primary">
+                                <i class="bi bi-camera-video"></i> Video
+                            </label>
+                        </div>
+                    </div>
+                    <div class="media-preview d-flex gap-3"></div>
+                    <div class="d-flex justify-content-end mt-3">
+                        <button type="submit" onclick="submitPost()" class="btn btn-primary">Post</button>
+                    </div>
+                </form>
+            </div>
+            <div id="loadingOverlay" class="loading-overlay d-none">
+                <div class="spinner-border text-light" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const createPostForm = document.getElementById('createPostForm');
+    const errorMessage = document.getElementById('error-message');
+    const mediaPreview = document.querySelector('.media-preview');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+
+    const imageInput = document.getElementById('imageInput');
+    const videoInput = document.getElementById('videoInput');
+
+    function handleFileInput(input, type) {
+        const file = input.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+
+            // Clear the preview before showing the new file
+            mediaPreview.innerHTML = '';
+
+            // Show the preview based on the file type
+            if (type === 'image') {
+                mediaPreview.innerHTML = `<img src="${url}" alt="Preview" class="rounded">`;
+            } else if (type === 'video') {
+                mediaPreview.innerHTML = `<video src="${url}" controls class="rounded"></video>`;
+            }
+        }
+    }
+
+    // Reset the other input when one is changed
+    imageInput.addEventListener('change', () => {
+        // Clear the video input if image input is changed
+        videoInput.value = '';
+        handleFileInput(imageInput, 'image');
+    });
+
+    videoInput.addEventListener('change', () => {
+        // Clear the image input if video input is changed
+        imageInput.value = '';
+        handleFileInput(videoInput, 'video');
+    });
+    
+    // ==================== AUTO URL PREVIEW (SSRF VULNERABILITY) ====================
+    let urlPreviewTimeout;
+    let lastPreviewedUrl = null;
+
+    // Regex to detect URLs in text
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+    // Auto-detect URL in caption and fetch preview
+    document.getElementById('caption').addEventListener('input', function() {
+        const text = this.value;
+        const urls = text.match(urlRegex);
+
+        if (urls && urls.length > 0) {
+            const url = urls[0]; // Get first URL
+
+            // Only fetch if URL changed
+            if (url !== lastPreviewedUrl) {
+                lastPreviewedUrl = url;
+
+                // Debounce - wait 1 second after user stops typing
+                clearTimeout(urlPreviewTimeout);
+                urlPreviewTimeout = setTimeout(() => {
+                    fetchUrlPreview(url);
+                }, 1000);
+            }
+        } else {
+            // No URL found - hide preview
+            lastPreviewedUrl = null;
+            document.getElementById('urlPreviewCard').classList.add('d-none');
+        }
+    });
+
+    // SSRF VULNERABILITY: Fetch URL preview without validation
+    function fetchUrlPreview(url) {
+        const token = localStorage.getItem('jwt');
+        const previewCard = document.getElementById('urlPreviewCard');
+        const previewContent = document.getElementById('urlPreviewContent');
+
+        // Show loading state
+        previewCard.classList.remove('d-none');
+        previewContent.innerHTML = `
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <small class="text-muted">Fetching preview from: ${url.substring(0, 50)}...</small>
+            </div>
+        `;
+
+        console.log('[SSRF] Auto-fetching URL preview:', url);
+
+        // Call SSRF endpoint
+        fetch('/api/posts/preview-url', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url: url })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('[SSRF] Preview response:', data);
+
+            if (data.responseCode === 1000 && data.result) {
+                const result = data.result;
+
+                // Display preview card like Facebook
+                previewContent.innerHTML = `
+                    <a href="${result.url}" target="_blank" class="text-decoration-none">
+                        <div class="border rounded p-2" style="background: white;">
+                            ${result.imageUrl && result.statusCode === 200 ?
+                                `<img src="${result.imageUrl}" class="img-fluid rounded mb-2" style="max-height: 150px; width: 100%; object-fit: cover;" onerror="this.style.display='none'">`
+                                : ''}
+                            <div class="px-1">
+                                <div class="small fw-bold text-dark">${result.title || 'No title'}</div>
+                                <div class="small text-muted" style="max-height: 40px; overflow: hidden;">
+                                    ${result.description || 'No description'}
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <small class="text-muted" style="font-size: 0.75rem;">
+                                        <i class="bi bi-link-45deg"></i> ${new URL(result.url).hostname}
+                                    </small>
+                                    <span class="badge bg-${result.statusCode === 200 ? 'success' : result.statusCode === -1 ? 'danger' : 'warning'}" style="font-size: 0.65rem;">
+                                        ${result.statusCode}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                `;
+            } else {
+                // Show error but still reveal SSRF attempt worked
+                previewContent.innerHTML = `
+                    <div class="alert alert-warning p-2 mb-0" style="font-size: 0.85rem;">
+                        <i class="bi bi-exclamation-triangle"></i> Could not load preview
+                        <div class="small text-muted">${url}</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('[SSRF] Error:', error);
+            previewContent.innerHTML = `
+                <div class="alert alert-danger p-2 mb-0" style="font-size: 0.85rem;">
+                    <i class="bi bi-x-circle"></i> Failed to fetch preview
+                </div>
+            `;
+        });
+    }
+
+    // Remove URL preview
+    function removeUrlPreview() {
+        document.getElementById('urlPreviewCard').classList.add('d-none');
+        lastPreviewedUrl = null;
+    }
+
+</script>
+</body>
+</html>

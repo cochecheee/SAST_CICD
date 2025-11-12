@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/images/logos/hcmute.png" type="image/png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" th:href="@{/css/styles_dashboard.css}">
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}">
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+    <script th:src="@{/js/jquery.min.js}"></script>
+</head>
+<body class="d-none">
+<header th:replace="~{fragments/admin_header :: header}">
+
+</header>
+
+<div class="container">
+    <h2>Dashboard</h2>
+
+    <!-- Cards -->
+    <div class="row">
+        <div class="card bg-primary">
+            <h5>Total user</h5>
+            <h2 id="total-users"></h2>
+        </div>
+        <div class="card bg-purple">
+            <h5>Posted Articles</h5>
+            <h2 id="total-posts"></h2>
+        </div>
+        <div class="card bg-warning">
+            <h5>Total Chats</h5>
+            <h2 id="total-chats"></h2>
+        </div>
+        <div class="card bg-danger">
+            <h5>Total Comments</h5>
+            <h2 id="total-comments">6</h2>
+        </div>
+        <!--      <div class="card bg-success">-->
+        <!--        <h5>Số thiết bị khả dụng</h5>-->
+        <!--        <h2>36</h2>-->
+        <!--      </div>-->
+    </div>
+
+    <!-- Charts -->
+    <div class="Charts" style="margin-top: 20px;">
+        <div id="chart1">
+            <h5>Tổng số phòng</h5>
+        </div>
+        <div id="chart2">
+            <h5>Tổng số thiết bị</h5>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/admin_footer :: footer}"></footer>
+
+<!--
+  Draw chart using Google Charts API
+-->
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+    google.charts.load('current', {'packages': ['corechart']});
+
+    // Hàm khởi chạy biểu đồ, truyền tham số vào
+    function drawChart(chartData, chartOptions, elementId) {
+        // Chuyển đổi dữ liệu thành đối tượng DataTable
+        var data = google.visualization.arrayToDataTable(chartData);
+
+        // Render biểu đồ vào element với id được chỉ định
+        var chart = new google.visualization.PieChart(document.getElementById(elementId));
+        chart.draw(data, chartOptions);
+    }
+
+    google.charts.setOnLoadCallback(function () {
+        // Thông tin biểu đồ thứ nhất
+        var data1 = [
+            ['Task', 'Hours per Day'],
+            ['Work', 8],
+            ['Eat', 2],
+            ['TV', 4],
+            ['Gym', 2],
+            ['Sleep', 8]
+        ];
+        var options1 = {'title': 'Tổng số phòng', 'width': 550, 'height': 400};
+
+        // Thông tin biểu đồ thứ hai
+        var data2 = [
+            ['Task', 'Hours per Day'],
+            ['Available', 30],
+            ['Used', 12]
+        ];
+        var options2 = {'title': 'Tổng số thiết bị', 'width': 550, 'height': 400};
+
+        // Gọi hàm vẽ biểu đồ với tham số tương ứng
+        // drawChart(data1, options1, 'chart1');
+        // drawChart(data2, options2, 'chart2');
+    });
+</script>
+<script>
+    $(document).ready(function () {
+        let token2 = localStorage.getItem('jwt');
+        fetch('/api/admin/dashboard', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token2}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                $('#total-users').html(data.result.userCount);
+                $('#total-posts').html(data.result.postCount);
+                $('#total-chats').html(data.result.chatCount);
+                $('#total-comments').html(data.result.commentCount);
+                var data1 = [
+                    ['Type of Posts', 'Quantity'],
+                    ['Posts Have Image', data.result.postsHaveImage],
+                    ['Posts Have Video', data.result.postsHaveVideo],
+                    ['Posts Have No Image or Video', data.result.postCount - data.result.postsHaveVideo - data.result.postsHaveImage],
+                ];
+                var options1 = {'title': 'All Posts', 'width': 550, 'height': 400};
+                var data2 = [
+                    ['Comment Rate on Post', 'Rate'],
+                    ['Commented', data.result.commentCount],
+                    ['No Comment', data.result.postCount - data.result.commentCount],
+                ];
+                var options2 = {'title': 'Comment Rate on Post', 'width': 550, 'height': 400};
+                drawChart(data1, options1, 'chart1');
+                drawChart(data2, options2, 'chart2');
+            })
+            .catch(error => {
+                console.error("Error updating profile:", error);
+            })
+    })
+</script>
+</body>
+</html>

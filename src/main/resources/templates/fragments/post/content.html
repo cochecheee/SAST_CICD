@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="content">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .modal-comment-container {
+            max-height: 90vh;
+            overflow-y: hidden;
+        }
+
+        .modal-content {
+
+        }
+
+        .comments-container {
+        }
+
+        .cursor-pointer {
+            cursor: pointer;
+        }
+
+        .comment-box {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 8px;
+        }
+
+        #comment-section {
+            min-height: 6rem;
+        }
+
+        .avatar {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .text-muted {
+            color: #6c757d;
+        }
+
+        .cursor-pointer {
+            cursor: pointer;
+        }
+
+        .text-cyan {
+            color: #00bcd4;
+        }
+
+        .text-cyan:hover {
+            color: #0097a7;
+        }
+
+        #comment-container {
+
+
+        }
+
+        #comment-input {
+            resize: none;
+        }
+
+        /* Nút chung */
+        button {
+            background: none;
+            border: none;
+            padding: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .already {
+            fill: red;
+        }
+
+        /* Nút yêu thích */
+        .heart-button:hover .heart-icon {
+            fill: red;
+        }
+
+        .heart-icon {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        /* Nút trò chuyện */
+        .chat-button:hover .chat-icon {
+            fill: cyan;
+        }
+
+        .chat-icon {
+            width: 24px;
+            height: 24px;
+            /*fill: currentColor;*/
+        }
+
+        /* Hover màu chữ theo kiểu Tailwind */
+        .hover\:text-red-400:hover {
+            color: #f87171; /* Màu đỏ */
+        }
+
+        .hover\:text-cyan-400:hover {
+            color: #22d3ee; /* Màu xanh cyan */
+        }
+    </style>
+    <script th:src="@{/js/load_comments.js}"></script>
+    <script th:src="@{/js/format_time.js}"></script>
+</head>
+<body>
+<div class="col-12 col-md-6 mt-xl-5">
+    <div id="postId" class="card d-flex flex-row p-2 card shadow rounded-3 mb-4">
+        <div class="d-flex ">
+            <img id="post-avatar-url" src="/images/unknown_user.jpg" alt="avatar"
+                 class="rounded-circle border-secondary" style="width: 2.5rem; height: 2.5rem; margin: 0.5rem;">
+        </div>
+        <div class="d-flex flex-column w-100">
+            <div class="d-flex align-items-center gap-2">
+                <a id="post-fullName" href="/profile/${post.user.userId}" class="font-weight-bold">
+
+                </a>
+                <span id="post-username" class="text-secondary"></span>
+                <span>·</span>
+                <span id="post-date" class="text-secondary"></span>
+            </div>
+            <div class="min-h-12">
+                <p id="post-caption" class="text-break"></p>
+            </div>
+            <div id="media-source">
+
+            </div>
+            <div class="d-flex justify-content-between mt-2">
+                <section class="d-flex gap-4">
+                    <!-- Like Button -->
+                    <div class="d-flex align-items-center">
+                        <button
+                                onclick="likePost(event)"
+                                class="heart-button hover:text-red-400"
+                                type="button"
+                                tabindex="0"
+                        >
+                            <svg
+                                    id="btn-liked"
+                                    class="heart-icon"
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    focusable="false"
+                            >
+                                <path
+                                        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"
+                                ></path>
+                            </svg>
+                        </button>
+                        <button type="button" class="btn btn-link p-0 text-danger">
+                            <span id="count-liked" class="hover-underline cursor-pointer"></span>
+                        </button>
+                    </div>
+
+                    <!-- Comment button -->
+                    <div class="d-flex align-items-center">
+                        <button
+                                title="Like this post"
+                                class="chat-button hover:text-cyan-400"
+                                type="button"
+                                tabindex="0"
+                        >
+                            <svg
+                                    class="chat-icon"
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    focusable="false"
+                            >
+                                <path
+                                        d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2"
+                                ></path>
+                            </svg>
+                        </button>
+                        <button type="button" class="btn btn-link p-0 text-info">
+                            <span id="count-comment" class="hover-underline cursor-pointer">0</span>
+                        </button>
+                    </div>
+                </section>
+                <button onclick="savePost(event)" type="button" class="btn btn-link p-0 text-info">
+                    <i id="btn-save"
+                       class="bi bi-bookmarks-fill"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    <section id="comment-section" class="card shadow px-3 mb-4">
+        <div id="comment-container">
+            <div id="${comment.commentId}" class="container mt-3">
+
+            </div>
+        </div>
+        <hr/>
+        <!-- Comment Input Section -->
+        <div class="modal-footer border-0 pb-3">
+            <div id="create-comment-container" class="d-flex align-items-center w-100">
+                <img id="post-current-user" src="/images/unknown_user.jpg" class="rounded-circle"
+                     style="width: 40px; height: 40px;" alt="avatar"/>
+                <textarea
+                        maxlength="2000"
+                        id="comment-input"
+                        rows="2"
+                        class="form-control mx-3 border border-secondary rounded-3"
+                        placeholder="Write your comment"
+                ></textarea>
+                <button id="create-comment-button" class="btn">
+                    <i class="bi bi-send text-cyan fs-3"></i>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <div th:insert="~{fragments/post/post_modal :: postModal}"></div>
+    <div th:insert="~{fragments/post/liked_modal :: likedModal}"></div>
+
+    <div th:insert="~{fragments/notification/notification_snackbar :: notificationSnackbar}"></div>
+</div>
+<script>
+    const url = window.location.pathname;
+    let postId = url.split('/').pop();
+    let createCommentButton = document.getElementById('create-comment-button');
+    createCommentButton.addEventListener('click', () => createComment(postId));
+    $.ajax({
+        url: `/api/posts/${postId}`,
+        type: 'GET',
+        contentType: 'application/json',
+        beforeSend: function (xhr) {
+            if (localStorage.jwt) {
+                xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.jwt);
+            }
+        },
+        success: function (response) {
+            let post = response.result;
+            $('#postId').attr('id', post.postId);
+            $('#post-fullName').html(post.user.firstName + ' ' + post.user.lastName);
+            $('#post-username').html('@' + post.user.username);
+            $('#post-caption').html(post.caption);
+            $('#post-date').html(formatDateFromString(post.createdAt));
+            $('#count-liked').html(post.likedCount);
+            $('#count-liked').on('click', () => openLikedModal(post.postId));
+            $('#count-liked').attr('id', 'count-liked-' + post.postId);
+            $('#count-comment').html(post.commentCount);
+            $('#count-comment').attr('id', 'count-comment-' + post.postId);
+            if (post.liked) {
+                $('#btn-liked').css('fill', 'red');
+            }
+            $('#btn-liked').attr('id', 'btn-' + post.postId);
+            if (post.saved) {
+                $('#btn-save').attr('title', 'Unsave this post')
+                $('#btn-save').css('color', 'blue');
+            }
+            else {
+                $('#btn-save').attr('title', 'Save this post')
+                $('#btn-save').css('color', 'black');
+            }
+            if (post.user.avatarUrl) {
+                $('#post-avatar-url').attr('src', `${post.user.avatarUrl}`)
+            }
+            $('#btn-save').attr('id', 'btn-save-' + post.postId);
+            let mediaDiv = document.getElementById('media-source');
+            if (post.imageUrl) {
+                mediaDiv.innerHTML = `
+                    <img src="${post.imageUrl}" class="img-fluid rounded border w-100" alt="post image">
+                `
+            } else if (post.videoUrl) {
+                mediaDiv.innerHTML = `
+                    <video class="img-fluid rounded border w-100" controls onclick="event.stopPropagation()">
+                        <source src="${post.videoUrl}">
+                    </video>
+                `
+            }
+        },
+        error: function (error) {
+            $('#loginError').text('Your email or password does not match.');
+        }
+    });
+    clearAndAddComment(postId);
+</script>
+<script>
+    function savePost(event) {
+        let targetElement = event.currentTarget;
+        for (let i = 0; i <= 2; i++) {
+            targetElement = targetElement.parentNode;
+        }
+        // Lấy id của phần tử đó
+        const postId = targetElement.id;
+        let token = localStorage.getItem('jwt')
+        fetch(`/api/posts/${postId}/save`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    let saveButton = document.getElementById(`btn-save-${postId}`)
+                    if (data.result === 'saved') {
+                        saveButton.style.color = 'blue';
+                        saveButton.title = 'Unsave this post'
+                    } else if (data.result === 'unsaved') {
+                        saveButton.style.color = 'black';
+                        saveButton.title = 'Save this post'
+                    }
+                } else {
+                    alert(data.message || 'An error occurred while sending the comment.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send comment. Please try again.');
+            });
+    }
+
+    function likePost(event) {
+        let targetElement = event.currentTarget;
+        for (let i = 0; i <= 4; i++) {
+            targetElement = targetElement.parentNode;
+        }
+        // Lấy id của phần tử đó
+        const postId = targetElement.id;
+        let token = localStorage.getItem('jwt')
+        fetch(`/api/posts/${postId}/like`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    let likedButton = document.getElementById(`btn-${postId}`)
+                    let countLike = document.getElementById(`count-liked-${postId}`)
+                    if (data.result === 'liked') {
+                        likedButton.style.fill = 'red';
+                        countLike.textContent = (parseInt(countLike.textContent) + 1).toString();
+                    } else if (data.result === 'unliked') {
+                        likedButton.style.fill = 'black';
+                        countLike.textContent = (parseInt(countLike.textContent) - 1).toString();
+                    }
+                } else {
+                    alert(data.message || 'An error occurred while sending the comment.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send comment. Please try again.');
+            });
+    }
+</script>
+<script>
+    function createComment(postId) {
+        let token = localStorage.getItem('jwt');
+        const commentInput = document.getElementById('comment-input');
+        const commentContent = commentInput.value.trim();
+        // Gửi request
+        fetch(`/api/comments/posts/${postId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({content: commentContent}),
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to send comment');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    let comment = data.result;
+                    let commentContainer = document.getElementById('comment-container');
+                    let messageDiv = createCommentHtml(comment);
+                    commentContainer.appendChild(messageDiv);
+                    // Xóa nội dung input
+                    commentInput.value = '';
+                    let countComment = document.getElementById(`count-comment-${postId}`)
+                    countComment.textContent = (parseInt(countComment.textContent) + 1).toString();
+
+                } else {
+                    alert(data.message || 'An error occurred while sending the comment.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send comment. Please try again.');
+            });
+    }
+</script>
+</body>
+</html>

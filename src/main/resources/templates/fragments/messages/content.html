@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="content">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script th:src="@{/js/user_chats.js}"></script>
+<!--    <script th:src="@{/js/web_socket_chat.js}"></script>-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script th:src="@{/js/format_time.js}"></script>
+    <title>Messages Page</title>
+    <style>
+        .message-page-container {
+            overflow-y: hidden; /* Loại bỏ cuộn ở div cha */
+            height: 100vh;
+        }
+        .message-list {
+            height: 90vh;
+            overflow-y: scroll;
+        }
+        .all-chat-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: scroll;
+        }
+        .chat-messages {
+            flex: 1;
+        }
+        .chat-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .avatar-custom {
+            width: 3rem;
+            height: 3rem;
+            border: 2px solid #cbd5e1; /* Slate-300 equivalent */
+            border-radius: 50%;
+            overflow: hidden;
+        }
+        .avatar-custom-2 {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            overflow: hidden;
+            flex-shrink: 0; /* Đảm bảo avatar không bị co */
+        }
+        .avatar-custom img {
+            height: 100%;
+            width: 100%;
+            object-fit: cover;
+        }
+        .avatar-custom-2 img {
+            height: 100%;
+            width: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+<nav th:replace="~{fragments/mobile_sidebar :: mobile_sidebar}">
+
+</nav>
+<div id="content-container" class="container-fluid col-12 col-md-9" style="display: none;">
+    <div class="row">
+        <!-- User Chat List -->
+        <div class="col-md-4 h-100">
+            <div class="bg-primary text-white p-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Messages</h5>
+                <button class="btn btn-light btn-sm">
+                    <i class="bi bi-envelope"></i>
+                </button>
+            </div>
+            <div id="user-chat-container" class="message-list p-2">
+
+            </div>
+        </div>
+
+        <!-- Chat Section -->
+        <div class="all-chat-container col-md-8">
+            <div id="chat-container" class="chat-container border p-2">
+                <!-- Chat Messages -->
+                <div class="d-flex justify-content-center align-items-center h-100">
+                    <h1>Select a chat to start messaging</h1>
+                </div>
+            </div>
+            <!-- Chat Input -->
+            <div id="chat-input" class="chat-input p-2" style="display: none">
+                <textarea maxlength="3000" id="chatInput" class="form-control" rows="1" placeholder="Type your message..."></textarea>
+                <button id="sendButton" class="btn btn-primary">
+                    <i class="bi bi-send"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<div th:insert="~{fragments/notification/notification_snackbar :: notificationSnackbar}"></div>
+<script>
+    // Already connect in notification
+
+    let socket = new WebSocket('/ws');
+    let stompClient = null;
+    let subscription;
+    let jwtToken = localStorage.getItem('jwt');
+
+    function connectWebSocket() {
+        stompClient = Stomp.over(socket); // Sử dụng WebSocket để tạo client Stomp
+
+        stompClient.connect({}, function(frame) {
+            console.log('Connected: ' + frame);
+        });
+    }
+    connectWebSocket();
+    function subscribeToUserTopic(chatId) {
+        if (stompClient && stompClient.connected) {
+            // Hủy đăng ký kênh cũ nếu đã có
+            unsubscribeClient();
+            let currentUser = user;
+            // Đăng ký để nhận tin nhắn từ server
+            subscription = stompClient.subscribe(`/user/${chatId}/chat/private`, function(message) {
+                const chatMessagesDiv = document.getElementById('chat-messages');
+                let msg = JSON.parse(message.body)
+                const chatContainer = document.getElementById('chat-container');
+                const isCurrentUser = msg.user.userId === currentUser.userId;
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('p-2');
+                if (isCurrentUser) {
+                    // If message is from current user, display as outgoing message
+                    messageDiv.classList.add('text-end');
+                    messageDiv.style.marginLeft = '8rem';
+                    messageDiv.innerHTML = `
+                                    <div id="${msg.messageId}">
+                                        <div class="bg-primary text-white rounded p-2 d-inline-block">
+                                            <p class="mb-0 text-start ps-2 pe-1">${msg.content}</p>
+                                        </div>
+                                        <small class="text-muted d-block">${formatDateFromString(msg.timestamp)}</small>
+                                    </div>
+                                `;
+                }
+                else {
+                    // If message is from another user, display as incoming message
+                    messageDiv.style.marginRight = '8rem';
+                    messageDiv.innerHTML = `
+                                <div id="${msg.messageId}" class="d-flex gap-2">
+                                    <div class="avatar-custom-2">
+                                        <img src="${msg.user.avatarUrl || '/images/unknown_user.jpg'}" alt="avatar" class="rounded-circle me-2">
+                                    </div>
+                                    <div>
+                                        <div class="bg-light rounded p-2">
+                                            <p class="mb-0 ps-2 pe-1">${msg.content}</p>
+                                        </div>
+                                        <small class="text-muted">${formatDateFromString(msg.timestamp)}</small>
+                                    </div>
+                                </div>
+                                `;
+                }
+                // Append message to chat container
+                chatMessagesDiv.appendChild(messageDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }, { "Authorization": `Bearer ${jwtToken}` });
+            // Lấy phần tử cha chứa input và nút gửi
+            const chatInputContainer = document.querySelector('.chat-input');
+
+            // Xoá các phần tử hiện tại
+            chatInputContainer.innerHTML = '';
+
+            // Tạo lại phần tử chatInput và sendButton
+            chatInputContainer.innerHTML = `
+                <textarea id="chatInput" class="form-control" rows="1" placeholder="Type your message..."></textarea>
+                <button id="sendButton" class="btn btn-primary">
+                    <i class="bi bi-send"></i>
+                </button>
+            `;
+            function sendMessage() {
+                const messageContent = document.getElementById('chatInput').value.trim(); // Lấy giá trị từ textarea theo id
+                if (messageContent && stompClient.connected) { // Kiểm tra nội dung tin nhắn và kết nối
+                    stompClient.send(`/app/chat/${chatId}`, {}, JSON.stringify({ 'content': messageContent }));
+                    console.log(chatId);
+                    console.log('Đã gửi tin nhắn: ' + messageContent);
+                    document.getElementById('chatInput').value = ''; // Xóa nội dung textarea sau khi gửi
+                } else {
+                    console.log('Vui lòng nhập tin nhắn hoặc kiểm tra kết nối WebSocket');
+                }
+            };
+
+            // Lắng nghe sự kiện nhấn nút gửi
+            document.getElementById('sendButton').addEventListener('click', sendMessage);
+        }
+    }
+
+    // Hàm unsubscribe
+    function unsubscribeClient() {
+        if (subscription) {
+            console.log(subscription)
+            subscription.unsubscribe();
+        }
+    }
+</script>
+</body>
+</html>

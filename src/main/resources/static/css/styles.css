@@ -1,0 +1,9 @@
+body {
+    background-color: #ffffff; /* Màu nền sáng cho chế độ sáng */
+    color: #000000; /* Màu chữ đen cho chế độ sáng */
+}
+
+.dark-mode {
+    background-color: #121212; /* Màu nền tối cho chế độ tối */
+    color: #ffffff; /* Màu chữ trắng cho chế độ tối */
+}

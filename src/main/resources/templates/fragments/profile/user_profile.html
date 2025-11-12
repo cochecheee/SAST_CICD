@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="userProfile">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Page</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css">
+    <script th:src="@{/js/user_profile.js}"></script>
+    <script th:src="@{/js/load_posts_in_profile.js}"></script>
+    <script th:src="@{/js/load_comments.js}"></script>
+    <script th:src="@{/js/format_time.js}"></script>
+    <style>
+        .profile-cover {
+            height: 15rem;
+            background-color: #cbd5e1;
+            position: relative;
+            overflow: hidden; /* Đảm bảo các phần tử không tràn ra ngoài */
+        }
+
+        .profile-avatar {
+            width: 10rem;
+            height: 10rem;
+            border: 4px solid #e2e8f0;
+            position: absolute;
+            bottom: -3rem; /* Căn chỉnh avatar bên dưới cover */
+            left: 1rem;
+            background-color: #fff; /* Màu nền đảm bảo hiển thị rõ avatar */
+        }
+
+        .btn-circle {
+            border-radius: 50px;
+        }
+
+        .save-cancel-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 10px;
+        }
+
+        .profile-avatar-label {
+            position: absolute;
+            bottom: 2rem; /* Đặt nút chỉnh sửa ngay dưới avatar */
+            left: 10rem; /* Căn chỉnh nút ở giữa avatar */
+            transform: translateX(-50%);
+        }
+
+        /* Lớp phủ tối */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Màu tối với độ trong suốt */
+            z-index: 9998; /* Đảm bảo nó nằm dưới vòng tròn loading */
+        }
+
+        /* Vòng tròn loading */
+        #loading-spinner {
+            z-index: 9999;
+        }
+
+        /* Chặn tất cả các tương tác phía sau khi loading */
+        body[style*="pointer-events: none;"] {
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container my-2 col-12 col-md-6">
+    <!-- Cover photo -->
+    <div class="profile-cover position-relative">
+        <img id="uCover" src="/images/blank_background.jpg" class="img-fluid w-100 h-100" alt="Cover Photo">
+    </div>
+
+    <!-- Avatar -->
+    <div class="position-relative">
+        <img id="uAvatar" src="/images/unknown_user.jpg" alt="Avatar" class="rounded-circle profile-avatar">
+        <div class="mt-5 d-flex justify-content-end ms-auto gap-2">
+            <button onclick="followUser()" id="follow-btn" class="btn btn-outline-primary btn-circle btn-sm d-none">Follow</button>
+            <button onclick="unfollowUser()" id="unfollow-btn" class="btn btn-outline-danger btn-circle btn-sm d-none">Unfollow</button>
+            <button onclick="addToChat()" id="add-chat-btn" class="btn btn-outline-success btn-circle btn-sm">Add to Chat</button>
+        </div>
+    </div>
+
+
+    <!-- User Info -->
+    <div class="mt-xl-5">
+        <h1 class="h4 fw-bold">
+            <strong id="uFirstName"></strong>
+            <strong id="uLastName"></strong>
+        </h1>
+        <p id="uUsername" class="text-muted"></p>
+        <div class="d-flex gap-2">
+            <span id="uPosts"></span>
+            <a role="button" id="uFollowers" class="text-decoration-none fw-bold"></a>
+            <a role="button" id="uFollowings" class="text-decoration-none fw-bold"></a>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mt-4">
+        <li id="post-tab" class="nav-item">
+            <a class="nav-link active" href="#posts" data-bs-toggle="tab">Posts</a>
+        </li>
+        <li id="video-tab" class="nav-item">
+            <a class="nav-link" href="#videos" data-bs-toggle="tab">Videos</a>
+        </li>
+        <li id="saved-tab" class="nav-item">
+            <a class="nav-link" href="#saved" data-bs-toggle="tab">Saved</a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content mt-3">
+        <div class="tab-pane fade show active" id="posts">
+        </div>
+        <div class="tab-pane fade" id="videos">
+        </div>
+        <div class="tab-pane fade" id="saved">
+        </div>
+        <div id="postContainer">
+
+        </div>
+    </div>
+
+    <!-- Lớp phủ tối -->
+    <div id="overlay" class="overlay d-none"></div>
+
+    <!-- Vòng tròn loading -->
+    <div id="loading-spinner" class="position-fixed top-50 start-50 translate-middle d-none">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div th:insert="~{fragments/post/comment_modal :: commentModal}"></div>
+    <div th:insert="~{fragments/post/liked_modal :: likedModal}"></div>
+    <div th:insert="~{fragments/profile/followers_modal :: followersModal}"></div>
+    <div th:insert="~{fragments/profile/followings_modal :: followingsModal}"></div>
+
+    <div th:insert="~{fragments/notification/notification_snackbar :: notificationSnackbar}"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const postTab = document.getElementById('post-tab');
+    const videoTab = document.getElementById('video-tab');
+    const savedTab = document.getElementById('saved-tab');
+    let token = localStorage.getItem('jwt');
+    const url = window.location.pathname;
+    const userId = url.split('/').pop();
+    postTab.addEventListener('click', () => startLoad(`/api/posts/users/${userId}`));
+    videoTab.addEventListener('click', () => startLoad(`/api/posts/users/videos/${userId}`));
+    savedTab.addEventListener('click', () => startLoad(`/api/posts/users/saved/${userId}`));
+</script>
+
+<script>
+    startLoad(`/api/posts/users/${userId}`);
+</script>
+
+<script>
+    const followBtn = document.getElementById('follow-btn');
+    const unfollowBtn = document.getElementById('unfollow-btn');
+    const addChatBtn = document.getElementById('add-chat-btn');
+    function followUser() {
+        fetch(`/api/users/follow/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    if (data.result === 'followed') {
+                        hideFollowBtns();
+                        let countFollow = document.getElementById(`uFollowers`)
+                        countFollow.textContent = (parseInt(countFollow.textContent) + 1).toString() + ' Followers';
+                    }
+                } else {
+                    alert(data.message || 'An error occurred while following user.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to follow.');
+            });
+    }
+
+    function unfollowUser() {
+        fetch(`/api/users/follow/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    if (data.result === 'unfollowed') {
+                        showFollowBtns();
+                        let countFollow = document.getElementById(`uFollowers`)
+                        countFollow.textContent = (parseInt(countFollow.textContent) - 1).toString() + ' Followers';
+                    }
+                } else {
+                    alert(data.message || 'An error occurred while unfollowing user.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to unfollow.');
+            });
+    }
+
+    function addToChat() {
+        fetch(`/api/chats/users/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    hideAddChatBtns();
+                } else {
+                    alert(data.message || 'An error occurred while creating a chat.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to create a chat.');
+            });
+    }
+    const showFollowBtns = (isCover) => {
+        followBtn.classList.remove('d-none');
+        unfollowBtn.classList.add('d-none');
+    }
+
+    const hideFollowBtns = () => {
+        followBtn.classList.add('d-none');
+        unfollowBtn.classList.remove('d-none');
+    }
+
+    const hideAddChatBtns = () => {
+        addChatBtn.classList.add('d-none');
+    }
+</script>
+
+<script>
+    let commentModal = new bootstrap.Modal(document.getElementById('commentModal'));
+
+    // Mở modal
+    function handleOpenComment(event) {
+        // Lấy phần tử cha của button
+        let targetElement = event.currentTarget;
+        for (let i = 0; i <= 5; i++) {
+            targetElement = targetElement.parentNode;
+        }
+
+        let createCommentButton = document.getElementById('create-comment-button');
+        if (createCommentButton)
+            createCommentButton.remove();
+        createCommentButton = document.createElement('button');
+        createCommentButton.id = 'create-comment-button';
+        createCommentButton.classList.add('btn');
+        createCommentButton.innerHTML = `
+            <i class="bi bi-send text-cyan fs-3"></i>
+        `
+        createCommentButton.addEventListener('click', () => createComment(postId));
+        let createCommentContainer = document.getElementById("create-comment-container");
+        createCommentContainer.appendChild(createCommentButton);
+
+        // Lấy id của phần tử đó
+        const postId = targetElement.id;
+        clearAndAddComment(postId);
+        if (user.avatarUrl != null)
+            $('#userAvatar').html(document.getElementById('userAvatar').src = user.avatarUrl);
+        commentModal.show();
+    }
+
+    // Đóng modal
+    function handleCloseComment() {
+        commentModal.hide();
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/images/logos/hcmute.png" type="image/png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit User</title>
+    <link rel="stylesheet" th:href="@{/css/styles_dashboard.css}">
+    <link rel="stylesheet" th:href="@{/css/styles_dashboard.css}">
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}">
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+    <script th:src="@{/js/jquery.min.js}"></script>
+</head>
+<header th:replace="~{fragments/admin_header :: header}">
+
+</header>
+
+<div class="container">
+    <h2>Edit User</h2>
+    <form id="updateForm" class="form_container">
+        <div class="head-form">
+            <h2>Edit User</h2>
+        </div>
+        <div class="form-group">
+            <label for="userId">ID</label>
+            <input type="text" id="userId" name="ID" value="1" readonly>
+        </div>
+        <div class="form-group">
+            <label for="firstName">First Name</label>
+            <input type="text" id="firstName" name="firstName">
+        </div>
+        <div class="form-group">
+            <label for="lastName">Last Name</label>
+            <input type="text" id="lastName" name="lastName">
+        </div>
+        <div class="form-group">
+            <label for="username">UserName</label>
+            <input type="text" id="username" name="username">
+        </div>
+        <div class="form-group">
+            <label for="Email">Email</label>
+            <input type="email" id="email" name="email">
+        </div>
+        <div class="form-group">
+            <label for="description">description</label>
+            <input type="text" id="description" name="description">
+        </div>
+        <div class="form-group">
+            <label for="gender">Gender</label>
+            <select id="gender" name="Gender">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+    </form>
+    <div class="form-group-btn">
+        <button onclick="updateUser()" type="submit" id="Submit_form"><a href="/#" style="text-decoration: none; color: white;">Update</a>
+        </button>
+        <button id="Reset_Password">Reset password</button>
+        <button type="reset" id="cancel" style="background-color: red;"><a href="/admin/dashboard"
+                                                                           style="text-decoration: none; color: white;">Cancel</a>
+        </button>
+    </div>
+    <!-- Modal -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <h2>Reset Password</h2>
+            <form>
+                <div class="form-group">
+                    <label for="new-password">New Password:</label>
+                    <input type="password" id="new-password" name="new-password" placeholder="Enter new password"
+                           required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm Password:</label>
+                    <input type="password" id="confirm-password" name="confirm-password"
+                           placeholder="Confirm new password" required>
+                </div>
+            </form>
+            <div class="actions">
+                <button onclick="resetPassword()" class="submit-btn">Reset</button>
+                <button type="button" class="close-btn" id="close-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/admin_footer :: footer}"></footer>
+
+</body>
+<script>
+    // Get modal and buttons
+    const modal = document.getElementById('resetPasswordModal');
+    const openModalBtn = document.getElementById('Reset_Password');
+    const closeModalBtn = document.getElementById('close-modal');
+
+    // Open the modal
+    openModalBtn.addEventListener('click', () => {
+        modal.style.display = 'flex';
+    });
+
+    // Close the modal
+    closeModalBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    // Close modal when clicking outside the content
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+</script>
+<script>
+    const url = window.location.pathname;
+    let userId = url.split('/').pop();
+    let token2 = localStorage.getItem('jwt');
+    fetch(`/api/users/${userId}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token2}`,
+            'Content-Type': 'application/json',
+        },
+    })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('userId').value = data.result.userId;
+            document.getElementById('firstName').value = data.result.firstName;
+            document.getElementById('lastName').value = data.result.lastName;
+            document.getElementById('username').value = data.result.username;
+            document.getElementById('email').value = data.result.email;
+            document.getElementById('description').value = data.result.description;
+            let gender = data.result.gender;
+            const genderSelect = document.getElementById("gender");
+            if (gender === true) {
+                genderSelect.value = "Male";
+            } else if (gender === false) {
+                genderSelect.value = "Female";
+            } else {
+                genderSelect.value = "Other";
+            }
+        })
+        .catch(error => console.error('Error fetching data:', error));
+</script>
+<script>
+    function updateUser() {
+        // Lấy dữ liệu từ các input
+        const formData = {
+            firstName: document.getElementById('firstName').value,
+            lastName: document.getElementById('lastName').value,
+            username: document.getElementById('username').value,
+            email: document.getElementById('email').value,
+            description: document.getElementById('description').value,
+            gender: document.getElementById('gender').value === "Male" ? true : document.getElementById('gender').value === "Female" ? false : null,
+        };
+        // Gửi dữ liệu qua API PUT
+        fetch(`/api/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token2}`
+            },
+            body: JSON.stringify(formData),
+        })
+            .then(response => {
+                if (response.ok) {
+                    window.location.href = "/admin/manage_user";
+                } else {
+                    return response.json().then(err => {
+                        throw new Error(err.message || 'Failed to update user');
+                    });
+                }
+            })
+            .catch(error => alert(`Error: ${error.message}`));
+    }
+</script>
+<script>
+    function resetPassword() {
+        const newPassword = document.getElementById('new-password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+        // Kiểm tra mật khẩu
+        if (newPassword.length < 6) {
+            alert('Password must be at least 6 characters long.');
+            return;
+        }
+
+        // Kiểm tra xác nhận mật khẩu
+        if (newPassword !== confirmPassword) {
+            alert('Passwords do not match.');
+            return;
+        }
+        // Lấy dữ liệu từ các input
+        const passwordData = {
+            password: newPassword
+        };
+        console.log(passwordData)
+        // Gửi dữ liệu qua API PUT
+        fetch(`/api/admin/users/${userId}/reset-password`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token2}`
+            },
+            body: JSON.stringify(passwordData),
+        })
+            .then(response => {
+                if (response.ok) {
+                    console.log('ok')
+                    alert("Password has been renew");
+                    window.location.href = "/admin/manage_user";
+                } else {
+                    return response.json().then(err => {
+                        throw new Error(err.message || 'Failed to update user');
+                    });
+                }
+            })
+            .catch(error => {
+                console.log(error)
+                alert(`Error: ${error.message}`);
+            });
+    }
+</script>
+
+</html>

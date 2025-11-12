@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="post">
+<head>
+    <meta charset="UTF-8">
+    <title>Post</title>
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}"></head>
+</head>
+<body>
+<div class="card d-flex flex-row p-2 card shadow rounded-3">
+    <div class="d-flex ">
+        <img src="https://upload.wikimedia.org/wikipedia/vi/7/7d/Bliss.png" alt="avatar" class="rounded-circle border border-secondary" style="width: 2.5rem; height: 2.5rem; margin: 0.5rem;">
+    </div>
+
+    <div class="d-flex flex-column w-100">
+        <div class="d-flex align-items-center gap-2">
+            <a  class="font-weight-bold">
+                <span th:text="Ho + ' ' + Ten"></span>
+            </a>
+            <span class="text-secondary">@<span th:text="username"></span></span>
+            <span>·</span>
+            <span class="text-secondary" th:text="2024-09-06"></span>
+        </div>
+        <div class="d-flex justify-content-between w-100">
+            <a th:href="adadad">
+                <i class="bi bi-arrow-right hover-text-cyan"></i>
+            </a>
+        </div>
+        <div class="min-h-12">
+            <p th:text="adasdad" class="text-break"></p>
+        </div>
+        <div>
+            <img src="https://t4.ftcdn.net/jpg/05/50/33/47/360_F_550334715_0d2cdaljV4Xd3x7yVUhRxfmLLEUyMdXr.jpg" class="img-fluid rounded border w-100 " style="cursor: pointer;" alt="post image" onclick="event.stopPropagation()">
+        </div>
+<!--        <div th:if="${post.videoUrl}">-->
+<!--            <video controls class="img-fluid rounded border">-->
+<!--                <source th:src="${post.videoUrl}" type="video/mp4">-->
+<!--                Your browser does not support the video tag.-->
+<!--            </video>-->
+<!--        </div>-->
+        <div class="d-flex justify-content-between mt-2">
+            <section class="d-flex gap-4">
+                <div>
+                    <button type="button" class="btn btn-link p-0 text-danger" onclick="likePost()">
+<!--                        <i class="bi" th:classappend="${isLiked ? 'bi-heart-fill text-danger' : 'bi-heart'}"></i>-->
+                    </button>
+                    <span th:text="1" class="hover-underline cursor-pointer" onclick="handleOpenUserLiked()"></span>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-link p-0 text-info" onclick="handleOpenComment()">
+                        <i class="bi bi-chat"></i>
+                    </button>
+                    <span th:text="3" class="hover-underline cursor-pointer" onclick="handleOpenComment()"></span>
+                </div>
+            </section>
+            <div>
+<!--                <button type="button" class="btn btn-link p-0" th:title="Unsave this post' : 'Save this post" onclick="savePost()">-->
+<!--                    <i class="bi" th:classappend="${isSaved ? 'bi-bookmark-fill text-info' : 'bi-bookmark'}"></i>-->
+<!--                </button>-->
+                <button type="button" class="btn btn-link p-0 text-info">
+                    <i class="bi bi-share"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- Comment Modal -->
+<!--    <div th:if="${openComment}" th:include="fragments/commentModal :: commentModal(postId=${post.postId}, likedCount=${newLikedCount}, commentCount=${newCommentCount})"></div>-->
+    <!-- User Liked Modal -->
+<!--    <div th:if="${openUserLiked}" th:include="fragments/userLikedPostModal :: userLikedPostModal(postId=${post.postId})"></div>-->
+</div>
+</body>
+</html>

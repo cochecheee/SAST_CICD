@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="notificationSnackbar">
+<!-- Notification Snackbar -->
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        .notification-snackbar {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            width: 360px;
+            background-color: #f8f9fa;
+            color: #212529;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            animation: slideInUp 0.3s ease-out;
+        }
+        @keyframes slideInUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        .notification-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .notification-content {
+            font-size: 14px;
+        }
+        .notification-close {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<a href="/notifications" id="notification-snackbar" class="notification-snackbar d-none text-decoration-none">
+    <div class="d-flex align-items-center p-3">
+        <img id="notification-avatar" src="" alt="avatar" class="notification-avatar me-3">
+        <div>
+            <p id="notification-message" class="mb-1 notification-content"></p>
+            <small id="notification-time" class="text-muted"></small>
+        </div>
+        <button id="notification-close" class="btn-close ms-auto"></button>
+    </div>
+</a>
+
+<script>
+    const snackbar = document.getElementById('notification-snackbar');
+    const avatar = document.getElementById('notification-avatar');
+    const message = document.getElementById('notification-message');
+    const time = document.getElementById('notification-time');
+    const closeBtn = document.getElementById('notification-close');
+
+
+    function formatDate(dateString) {
+        const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return new Date(dateString).toLocaleDateString('en-US', options);
+    }
+
+    let timeoutId;
+
+    function showNotification(notification) {
+        avatar.src = notification.triggerUser.avatarUrl || '/images/unknown_user.jpg';
+        message.innerHTML = `<strong>@${notification.triggerUser.username}</strong> ${
+            notification.notificationType === "LIKE" ? "liked your post" : "commented on your post"
+        }: <em>${notification.post.caption}</em>`;
+        time.textContent = formatDate(notification.createdAt);
+        snackbar.classList.remove('d-none');
+
+        // Xóa timeout cũ nếu nó tồn tại
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+
+        // Thiết lập timeout mới
+        timeoutId = setTimeout(() => {
+            snackbar.classList.add('d-none');
+        }, 7000);
+    }
+
+    closeBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        snackbar.classList.add('d-none');
+    });
+
+</script>
+<script>
+    function connectWebSockeNotify(userId) {
+        let notifySocket = new WebSocket('/ws'); // Tạo WebSocket mới mỗi lần gọi
+        let notifyStompClient = Stomp.over(notifySocket);
+        let jwtToken = localStorage.getItem('jwt');
+        notifyStompClient.connect({}, function (frame) {
+            console.log('Connected: ' + frame);
+            let notifySubscription = notifyStompClient.subscribe(`/user/${userId}/notification/private`, function (notification) {
+                let notf = JSON.parse(notification.body);
+                showNotification(notf);
+            }, { "Authorization": `Bearer ${jwtToken}` });
+        }, function (error) {
+            console.error("Connection failed:", error);
+        });
+    }
+</script>
+</html>

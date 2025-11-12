@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="mobile_sidebar">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* Ẩn navbar mặc định */
+        .navbar {
+            display: none;
+        }
+
+        /* Hiển thị navbar khi màn hình nhỏ hơn 768px */
+        @media (max-width: 768px) {
+            .navbar {
+                display: block; /* Hiển thị navbar */
+            }
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-md navbar-light bg-light sticky-top">
+    <div class="container-fluid">
+        <!-- Logo và tên -->
+        <a class="navbar-brand d-flex justify-content-center align-items-center gap-2" href="/">
+            <img src="/images/logos/hcmute.png" alt="ALOUTE" class="img-fluid" style="width: 30px;">
+            <span class="fw-bold fw-3 ml-2 text-decoration-none">ALOUTE</span>
+        </a>
+
+        <!-- Nút Hamburger -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- Menu các lựa chọn -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a href="/" id="home-link" class="nav-link">
+                        <i class="bi bi-house-door-fill mr-3"></i>
+                        Home
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/videos" id="popular-videos-link" class="nav-link">
+                        <i class="bi bi-file-play-fill mr-3"></i>
+                        Videos
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/search" id="search-link" class="nav-link">
+                        <i class="bi bi-search mr-3"></i>
+                        Search
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/notifications" id="notification-link" class="nav-link">
+                        <i class="bi bi-bell-fill mr-3"></i>
+                        Notifications
+                        <span class="badge badge-danger ml-auto">3</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/messages" id="messages-link" class="nav-link">
+                        <i class="bi bi-chat-right-text-fill mr-3"></i>
+                        Messages
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/communities" id="communities-link" class="nav-link">
+                        <i class="bi bi-back mr-3"></i>
+                        Communities
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/profile/me" id="profile-link" class="nav-link">
+                        <i class="bi bi-person-circle mr-3"></i>
+                        Profile
+                    </a>
+                </li>
+                <li class="nav-item d-none">
+                    <a href="/admin/dashboard" id="admin-link" class="nav-link">
+                        <i class="bi bi-database-fill mr-3"></i>
+                        Administrator
+                    </a>
+                </li>
+                <li>
+                    <button title="Logout" class="btn btn-link p-0" id="logoutButton2">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Nút X để đóng menu -->
+            <div class="d-flex justify-content-center">
+                <button type="button" class="btn-close d-md-none" id="closeMenuBtn" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+</nav>
+<script>
+    const logoutButton2 = document.getElementById('logoutButton2');
+
+    // Thêm sự kiện click
+    logoutButton2.addEventListener('click', function () {
+        // Hiển thị hộp thoại xác nhận
+        const confirmed = confirm("Are you sure you want to log out?");
+
+        // Nếu người dùng chọn "OK"
+        if (confirmed) {
+            // Xóa JWT khỏi Local Storage
+            localStorage.removeItem('jwt');
+
+            // Reload lại trang
+            location.reload();
+        }
+    });
+
+    // Thêm sự kiện cho nút "X"
+    document.getElementById('closeMenuBtn').addEventListener('click', function() {
+        var collapseElement = document.getElementById('navbarNav');
+        var bsCollapse = new bootstrap.Collapse(collapseElement, {
+            toggle: false // Ngừng toggle, chỉ đóng
+        });
+        bsCollapse.hide(); // Đóng menu
+    });
+</script>
+</body>
+</html>

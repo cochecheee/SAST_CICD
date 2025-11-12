@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="commentModal">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .modal-comment-container {
+            max-height: 90vh;
+            overflow-y: hidden;
+        }
+
+        .modal-content {
+
+        }
+
+        .comments-container {
+        }
+
+        .cursor-pointer {
+            cursor: pointer;
+        }
+
+        .comment-box {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 8px;
+        }
+
+        .avatar {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .text-muted {
+            color: #6c757d;
+        }
+
+        .cursor-pointer {
+            cursor: pointer;
+        }
+
+        .text-cyan {
+            color: #00bcd4;
+        }
+
+        .text-cyan:hover {
+            color: #0097a7;
+        }
+
+        #comment-container {
+            min-height: 30vh;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        #comment-input {
+            resize: none;
+        }
+    </style>
+</head>
+<body>
+<!-- Modal HTML -->
+<div class="modal fade modal-comment-container" id="commentModal" tabindex="-1" aria-labelledby="commentModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content rounded-3">
+            <!-- Close Button -->
+            <div class="modal-header border-0">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <!-- Modal Body -->
+            <div class="modal-body">
+                <div id="comment-container">
+
+                </div>
+            </div>
+            <hr/>
+            <!-- Comment Input Section -->
+            <div class="modal-footer border-0">
+                <div id="create-comment-container" class="d-flex align-items-center w-100">
+                    <img id="userAvatar" src="/images/unknown_user.jpg" class="rounded-circle"
+                         style="width: 40px; height: 40px;" alt="avatar"/>
+                    <textarea
+                            maxlength="2000"
+                            id="comment-input"
+                            rows="2"
+                            class="form-control mx-3 border border-secondary rounded-3"
+                            placeholder="Write your comment"
+                    ></textarea>
+                    <button id="create-comment-button" class="btn">
+                        <i class="bi bi-send text-cyan fs-3"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function createComment(postId) {
+        let token = localStorage.getItem('jwt');
+        const commentInput = document.getElementById('comment-input');
+        const commentContent = commentInput.value.trim();
+        // Gửi request
+        fetch(`/api/comments/posts/${postId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({content: commentContent}),
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to send comment');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.responseCode === 1000) {
+                    let comment = data.result;
+                    let commentContainer = document.getElementById('comment-container');
+                    let messageDiv = createCommentHtml(comment);
+                    commentContainer.appendChild(messageDiv);
+                    // Xóa nội dung input
+                    commentInput.value = '';
+                    let countComment = document.getElementById(`count-comment-${postId}`)
+                    countComment.textContent = (parseInt(countComment.textContent) + 1).toString();
+
+                } else {
+                    alert(data.message || 'An error occurred while sending the comment.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send comment. Please try again.');
+            });
+    }
+</script>
+</body>
+</html>

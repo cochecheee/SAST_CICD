@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+
+        <!-- Rolling File Appender for Auth logs -->
+        <RollingFile name="AuthLog" fileName="logs/auth.log"
+                     filePattern="logs/auth-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+
+        <!-- Rolling File Appender for Security logs -->
+        <RollingFile name="SecurityLog" fileName="logs/security.log"
+                     filePattern="logs/security-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} [%level] %logger - %msg%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+
+        <!-- Rolling File Appender for Application logs -->
+        <RollingFile name="AppLog" fileName="logs/application.log"
+                     filePattern="logs/application-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Auth Controller logging -->
+        <Logger name="com.nhoclahola.socialnetworkv1.controller.api.AuthController" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AuthLog"/>
+        </Logger>
+
+        <!-- SSRF URL Preview logging - Security monitoring -->
+        <Logger name="com.nhoclahola.socialnetworkv1.service.UrlPreviewServiceImplementation" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="SecurityLog"/>
+        </Logger>
+
+        <!-- All Controllers logging -->
+        <Logger name="com.nhoclahola.socialnetworkv1.controller" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLog"/>
+        </Logger>
+
+        <!-- Service layer logging -->
+        <Logger name="com.nhoclahola.socialnetworkv1.service" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLog"/>
+        </Logger>
+
+        <!-- Security logging -->
+        <Logger name="com.nhoclahola.socialnetworkv1.security" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="SecurityLog"/>
+        </Logger>
+
+        <!-- Spring Framework logging -->
+        <Logger name="org.springframework" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLog"/>
+        </Logger>
+
+        <!-- Root logger -->
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLog"/>
+        </Root>
+    </Loggers>
+</Configuration>
