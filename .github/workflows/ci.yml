@@ -3,22 +3,21 @@ name: CI Workflow (Gradle)
 on:
   push:
     branches:
-      - main  # chỉ trigger khi có push (merge) vào main
+      - main
 
 jobs:
   ci:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      # ❌ Bỏ "security-events: write" vì không upload lên GitHub Security tab
+    # permissions:
+    #   contents: write  # Bỏ nếu không cần upload SARIF lên GitHub
+    #   security-events: write  # Bỏ nếu không upload lên GitHub Security tab
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # để SonarQube phân tích đầy đủ lịch sử
+          fetch-depth: 0
 
       # Set up JDK
       - name: Set up JDK 17 for Gradle
@@ -28,7 +27,7 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # Initialize CodeQL (chạy phân tích cục bộ, không upload)
+      # Initialize CodeQL
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -38,21 +37,26 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew compileJava --no-daemon
 
-      # Perform CodeQL Analysis (chỉ xuất SARIF ra artifact)
-      - name: Perform CodeQL Analysis (local)
+      # Perform CodeQL Analysis (chỉ xuất SARIF, không upload lên GitHub)
+      - name: Perform CodeQL Analysis (local only)
         uses: github/codeql-action/analyze@v3
         with:
-          output: codeql-results.sarif  # ✅ xuất kết quả cục bộ, không upload
           category: "/language:java"
 
-      # Upload SARIF file làm artifact (để tải về)
-      - name: Upload CodeQL Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: codeql-sarif
-          path: codeql-results.sarif
+      # ✅ Copy SARIF file từ nơi CodeQL xuất ra
+      - name: Copy SARIF file
+        run: |
+          # CodeQL xuất SARIF vào thư mục sau khi analyze:
+          # /home/runner/work/_temp/_github_workflow/...
+          # Đường dẫn cụ thể có thể thay đổi theo phiên bản action
+          # Nhưng theo log trước đây, SARIF file nằm ở:
+          # /home/runner/work/SAST_CICD/SAST_CICD/codeql-results.sarif/java.sarif
+          # hoặc tương tự
+          # Bạn có thể dùng find để xác định chính xác:
+          find /home/runner/work -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
+          echo "Copied SARIF file to codeql-results.sarif"
 
-      # Convert CodeQL SARIF to Sonar format (để đưa vào SonarQube)
+      # ✅ Convert CodeQL SARIF to Sonar format
       - name: Convert CodeQL SARIF to Sonar format
         run: |
           python scripts/convert_codeql_to_sonar.py \
@@ -75,7 +79,7 @@ jobs:
       - name: Build & Test (Gradle)
         run: ./gradlew clean build --no-daemon
 
-      # SonarQube Scan (gộp các báo cáo CodeQL & OWASP)
+      # ✅ SonarQube Scan (gộp các báo cáo CodeQL & OWASP)
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v4
         env:
@@ -131,4 +135,4 @@ jobs:
           path: |
             build/reports/dependency-check-report.*
             sonar-issues.json
-            codeql-results.sarif
+            codeql-results.sarif  # Nếu bạn vẫn muốn lưu SARIF làm artifact
