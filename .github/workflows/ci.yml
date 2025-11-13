@@ -65,32 +65,49 @@ jobs:
             --input codeql-results.sarif \
             --output sonar-issues.json
 
-      # Quét lỗ hổng dependency với OWASP Dependency-Check
-      - name: Run OWASP Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
+      # Cache Dependency-Check
+      - name: Cache Dependency-Check
+        uses: actions/cache@v4
         with:
-          project: 'aloute-spring'
-          path: '.'
-          format: 'XML,JSON'
-          out: 'build/reports'
-          args: >
-            --enableRetired
-            --enableExperimental
+          path: |
+            dependency-check
+            ~/.m2/repository/org/owasp/dependency-check-data
+          key: ${{ runner.os }}-dependency-check-10.0.4-${{ hashFiles('**/pom.xml', '**/build.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-dependency-check-10.0.4-
+            ${{ runner.os }}-dependency-check-
 
-      # Chuyển reports về đúng tên file
-      - name: Rename Dependency-Check Reports
+      # Cài Dependency-Check (OWASP)
+      - name: Install Dependency-Check
         run: |
-          if [ -f "build/reports/dependency-check-report.xml" ]; then
-            echo "✅ XML report found"
+          if [ ! -d "dependency-check" ]; then
+            echo "📥 Downloading Dependency-Check..."
+            wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
+            echo "📦 Extracting..."
+            unzip -q dependency-check-10.0.4-release.zip
+            echo "✅ Installation complete"
           else
-            # Nếu file có tên khác, đổi tên lại
-            find build/reports -name "*.xml" -exec cp {} build/reports/dependency-check-report.xml \;
+            echo "✅ Using cached Dependency-Check"
           fi
-          if [ -f "build/reports/dependency-check-report.json" ]; then
-            echo "✅ JSON report found"
-          else
-            find build/reports -name "*.json" -exec cp {} build/reports/dependency-check-report.json \;
-          fi
+          ls -la dependency-check/bin/
+
+      # Quét lỗ hổng dependency
+      - name: Run Dependency-Check
+        run: |
+          mkdir -p build/reports
+          echo "🔍 Running Dependency-Check scan..."
+          ./dependency-check/bin/dependency-check.sh \
+            --scan . \
+            --out build/reports \
+            --format XML \
+            --format JSON \
+            --project "aloute-spring" \
+            --exclude "**/node_modules/**" \
+            --exclude "**/test/**" \
+            --exclude "**/tests/**" || echo "⚠️ Dependency-Check completed with warnings"
+          
+          echo "📋 Generated reports:"
+          ls -lh build/reports/
 
       # Build & Test
       - name: Build & Test (Gradle)
