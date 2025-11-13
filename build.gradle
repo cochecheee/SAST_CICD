@@ -3,7 +3,7 @@ plugins {
     id 'org.springframework.boot' version '2.7.18'
     id 'io.spring.dependency-management' version '1.1.0'
 //    // add SonarScanner plugin
-//    id "org.sonarqube" version "6.3.1.5724"
+    id "org.sonarqube" version "6.3.1.5724"
 //    // scan dependency
 //    id 'org.owasp.dependencycheck' version '12.1.0'
 }
@@ -85,6 +85,31 @@ dependencies {
     // MySQL Connector
     runtimeOnly 'com.mysql:mysql-connector-j:8.2.0'
 }
+
+sonar {
+    properties {
+        property "sonar.projectKey", "sast-social"
+        property "sonar.projectName", "Aloute Spring Social"
+        property "sonar.host.url", System.getenv("SONAR_HOST_URL") ?: "http://localhost:9000"
+        property "sonar.token", System.getenv("SONAR_TOKEN")
+
+        // Source directories
+        property "sonar.sources", "src/main/java"
+        property "sonar.tests", "src/test/java"
+        property "sonar.java.binaries", "build/classes/java/main"
+        property "sonar.java.test.binaries", "build/classes/java/test"
+
+        // External reports
+        property "sonar.externalIssuesReportPaths", "sonar-issues.json"
+        property "sonar.dependencyCheck.xmlReportPath", "build/reports/dependency-check-report.xml"
+        property "sonar.dependencyCheck.jsonReportPath", "build/reports/dependency-check-report.json"
+
+        // Exclusions
+        property "sonar.exclusions", "**/test/**,**/build/**,**/node_modules/**"
+        property "sonar.test.exclusions", "**/test/**"
+    }
+}
+
 
 tasks.named('test') {
     useJUnitPlatform()
