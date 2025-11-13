@@ -89,9 +89,9 @@ dependencies {
 sonar {
     properties {
         property "sonar.projectKey", "sast-social"
-        property "sonar.projectName", "Aloute Spring Social"
-        property "sonar.host.url", System.getenv("SONAR_HOST_URL") ?: "http://localhost:9000"
-        property "sonar.token", System.getenv("SONAR_TOKEN")
+        property "sonar.projectName", "Asast-social"
+        property "sonar.host.url", "https://sonarqube.cochechee.io.vn"
+        property "sonar.token", ""
 
         // Source directories
         property "sonar.sources", "src/main/java"
