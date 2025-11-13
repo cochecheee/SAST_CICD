@@ -144,7 +144,7 @@ jobs:
         run: ./gradlew clean build --no-daemon -x test
 
       # ========================================
-      # SONARQUBE SCAN - FIXED VERSION
+      # SONARQUBE SCAN - FIXED VERSION1
       # ========================================
 
       # Cache SonarQube packages
