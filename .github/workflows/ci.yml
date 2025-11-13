@@ -9,10 +9,6 @@ jobs:
   ci:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
-    # Bỏ comment nếu muốn upload SARIF lên GitHub Security tab
-    # permissions:
-    #   contents: write
-    #   security-events: write
 
     steps:
       - name: Checkout code
@@ -43,13 +39,12 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:java"
-          upload: false  # ✅ Tắt upload lên GitHub
-          output: codeql-results  # ✅ Chỉ định thư mục output
+          upload: false
+          output: codeql-results
 
-      # ✅ Copy SARIF file từ thư mục CodeQL output
+      # Copy SARIF file
       - name: Copy SARIF file
         run: |
-          # CodeQL xuất SARIF vào thư mục được chỉ định
           if [ -f "codeql-results/java.sarif" ]; then
             cp codeql-results/java.sarif codeql-results.sarif
             echo "✅ Copied SARIF file to codeql-results.sarif"
@@ -58,7 +53,7 @@ jobs:
             find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
           fi
 
-      # ✅ Convert CodeQL SARIF to Sonar format
+      # Convert CodeQL SARIF to Sonar format
       - name: Convert CodeQL SARIF to Sonar format
         run: |
           python scripts/convert_codeql_to_sonar.py \
@@ -72,12 +67,12 @@ jobs:
           path: |
             dependency-check
             ~/.m2/repository/org/owasp/dependency-check-data
-          key: ${{ runner.os }}-dependency-check-10.0.4-${{ hashFiles('**/pom.xml', '**/build.gradle') }}
+          key: ${{ runner.os }}-dependency-check-10.0.4-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-dependency-check-10.0.4-
             ${{ runner.os }}-dependency-check-
 
-      # Cài Dependency-Check (OWASP)
+      # Install Dependency-Check
       - name: Install Dependency-Check
         run: |
           if [ ! -d "dependency-check" ]; then
@@ -91,20 +86,36 @@ jobs:
           fi
           ls -la dependency-check/bin/
 
-      # Quét lỗ hổng dependency
+      # Run Dependency-Check
       - name: Run Dependency-Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           mkdir -p build/reports
           echo "🔍 Running Dependency-Check scan..."
-          ./dependency-check/bin/dependency-check.sh \
-            --scan . \
-            --out build/reports \
-            --format XML \
-            --format JSON \
-            --project "aloute-spring" \
-            --exclude "**/node_modules/**" \
-            --exclude "**/test/**" \
-            --exclude "**/tests/**" || echo "⚠️ Dependency-Check completed with warnings"
+          
+          # Build base command
+          CMD="./dependency-check/bin/dependency-check.sh"
+          CMD="$CMD --scan ."
+          CMD="$CMD --out build/reports"
+          CMD="$CMD --format XML"
+          CMD="$CMD --format JSON"
+          CMD="$CMD --project aloute-spring"
+          CMD="$CMD --exclude '**/node_modules/**'"
+          CMD="$CMD --exclude '**/test/**'"
+          CMD="$CMD --exclude '**/tests/**'"
+          
+          # Add NVD API key if available
+          if [ -n "$NVD_API_KEY" ]; then
+            echo "✅ Using NVD API Key (faster CVE updates)"
+            CMD="$CMD --nvdApiKey $NVD_API_KEY"
+          else
+            echo "⚠️ No NVD API Key found - using slower public feed"
+            echo "💡 Get a free API key at: https://nvd.nist.gov/developers/request-an-api-key"
+          fi
+          
+          # Execute command
+          eval $CMD || echo "⚠️ Dependency-Check completed with warnings"
           
           echo "📋 Generated reports:"
           ls -lh build/reports/
@@ -113,7 +124,7 @@ jobs:
       - name: Build & Test (Gradle)
         run: ./gradlew clean build --no-daemon
 
-      # ✅ SonarQube Scan (gộp các báo cáo CodeQL & OWASP)
+      # SonarQube Scan
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v4
         env:
@@ -126,7 +137,7 @@ jobs:
             -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml
             -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json
 
-      # Kiểm tra Quality Gate
+      # Check Quality Gate
       - name: Check SonarQube Quality Gate
         uses: sonarsource/sonarqube-quality-gate-action@v1
         env:
@@ -139,7 +150,7 @@ jobs:
       - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
 
-      # Scan Docker image với Trivy
+      # Scan Docker image with Trivy
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -150,18 +161,18 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL'
 
-      # Login Docker Hub
+      # Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Push image
+      # Push Docker image
       - name: Push Docker Image to Docker Hub
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
 
-      # Upload toàn bộ báo cáo Security
+      # Upload Security Reports
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
         with:
@@ -171,3 +182,4 @@ jobs:
             sonar-issues.json
             codeql-results.sarif
             codeql-results/java.sarif
+        if: always()  # Upload even if previous steps fail
