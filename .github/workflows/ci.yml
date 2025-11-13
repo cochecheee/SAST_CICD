@@ -9,9 +9,10 @@ jobs:
   ci:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
+    # Bỏ comment nếu muốn upload SARIF lên GitHub Security tab
     # permissions:
-    #   contents: write  # Bỏ nếu không cần upload SARIF lên GitHub
-    #   security-events: write  # Bỏ nếu không upload lên GitHub Security tab
+    #   contents: write
+    #   security-events: write
 
     steps:
       - name: Checkout code
@@ -42,18 +43,20 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:java"
+          upload: false  # ✅ Tắt upload lên GitHub
+          output: codeql-results  # ✅ Chỉ định thư mục output
 
-      # ✅ Copy SARIF file từ nơi CodeQL xuất ra
+      # ✅ Copy SARIF file từ thư mục CodeQL output
       - name: Copy SARIF file
         run: |
-          # CodeQL xuất SARIF vào thư mục sau khi analyze:
-          # Đường dẫn cụ thể có thể thay đổi theo phiên bản action
-          # Nhưng theo log trước đây, SARIF file nằm ở:
-          # /home/runner/work/SAST_CICD/results/java.sarif
-          # hoặc tương tự
-          # Bạn có thể dùng find để xác định chính xác:
-          find /home/runner/work -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
-          echo "Copied SARIF file to codeql-results.sarif"
+          # CodeQL xuất SARIF vào thư mục được chỉ định
+          if [ -f "codeql-results/java.sarif" ]; then
+            cp codeql-results/java.sarif codeql-results.sarif
+            echo "✅ Copied SARIF file to codeql-results.sarif"
+          else
+            echo "❌ SARIF file not found, searching..."
+            find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
+          fi
 
       # ✅ Convert CodeQL SARIF to Sonar format
       - name: Convert CodeQL SARIF to Sonar format
@@ -135,3 +138,4 @@ jobs:
             build/reports/dependency-check-report.*
             sonar-issues.json
             codeql-results.sarif
+            codeql-results/java.sarif
