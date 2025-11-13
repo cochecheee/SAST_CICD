@@ -3,22 +3,21 @@ name: CI Workflow (Gradle)
 on:
   push:
     branches:
-      - main
+      - main  # chỉ trigger khi có push (merge) vào main
 
 jobs:
   ci:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
+    # permissions:
+    #   contents: write  # Bỏ nếu không cần upload SARIF lên GitHub
+    #   security-events: write  # Bỏ nếu không upload lên GitHub Security tab
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # để SonarQube phân tích đầy đủ lịch sử
 
       # Set up JDK
       - name: Set up JDK 17 for Gradle
@@ -48,10 +47,9 @@ jobs:
       - name: Copy SARIF file
         run: |
           # CodeQL xuất SARIF vào thư mục sau khi analyze:
-          # /home/runner/work/_temp/_github_workflow/...
           # Đường dẫn cụ thể có thể thay đổi theo phiên bản action
           # Nhưng theo log trước đây, SARIF file nằm ở:
-          # /home/runner/work/SAST_CICD/SAST_CICD/codeql-results.sarif/java.sarif
+          # /home/runner/work/SAST_CICD/results/java.sarif
           # hoặc tương tự
           # Bạn có thể dùng find để xác định chính xác:
           find /home/runner/work -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
@@ -136,4 +134,4 @@ jobs:
           path: |
             build/reports/dependency-check-report.*
             sonar-issues.json
-            codeql-results.sarif  # Nếu bạn vẫn muốn lưu SARIF làm artifact
+            codeql-results.sarif
