@@ -87,10 +87,77 @@ dependencies {
     runtimeOnly 'com.mysql:mysql-connector-j:8.2.0'
 }
 
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '2.7.18'
+    id 'io.spring.dependency-management' version '1.1.0'
+    id "org.sonarqube" version "5.1.0.4882"
+}
+
+group = 'com.nhoclahola'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+    all {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.logging.log4j:log4j-api:2.14.1'
+    implementation 'org.apache.logging.log4j:log4j-core:2.14.1'
+    implementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.14.1'
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.mariadb.jdbc:mariadb-java-client:3.0.11'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'io.jsonwebtoken:jjwt:0.9.1'
+
+    implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+    implementation 'org.projectlombok:lombok-mapstruct-binding:0.1.0'
+
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.apache.tika:tika-core:2.9.2'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.security:spring-security-messaging:5.7.11'
+
+    implementation 'software.amazon.awssdk:aws-core:2.27.17'
+    implementation 'software.amazon.awssdk:s3:2.27.17'
+    testImplementation 'software.amazon.awssdk:s3:2.27.17'
+
+    // SSRF vulnerability - should be updated to latest version
+    implementation 'org.jsoup:jsoup:1.15.3'
+
+    runtimeOnly 'com.mysql:mysql-connector-j:8.2.0'
+}
+
 sonar {
     properties {
         property "sonar.projectKey", "sast-social"
-        property "sonar.projectName", "Asast-social"
+        property "sonar.projectName", "sast-social"
+        // Don't hardcode these - they should come from environment variables or command line
         property "sonar.host.url", "https://sonarqube.cochechee.io.vn"
         property "sonar.token", ""
 
@@ -100,7 +167,7 @@ sonar {
         property "sonar.java.binaries", "build/classes/java/main"
         property "sonar.java.test.binaries", "build/classes/java/test"
 
-        // External reports
+        // External reports (optional - can be overridden via command line)
         property "sonar.externalIssuesReportPaths", "sonar-issues.json"
         property "sonar.dependencyCheck.xmlReportPath", "build/reports/dependency-check-report.xml"
         property "sonar.dependencyCheck.jsonReportPath", "build/reports/dependency-check-report.json"
@@ -108,9 +175,11 @@ sonar {
         // Exclusions
         property "sonar.exclusions", "**/test/**,**/build/**,**/node_modules/**"
         property "sonar.test.exclusions", "**/test/**"
+
+        // Coverage (if using JaCoCo)
+        // property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
     }
 }
-
 
 tasks.named('test') {
     useJUnitPlatform()

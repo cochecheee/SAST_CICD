@@ -201,7 +201,7 @@ jobs:
             --info \
             --no-daemon \
             -Dsonar.projectKey=sast-social \
-            -Dsonar.projectName=Asast-social \
+            -Dsonar.projectName=sast-social \
             -Dsonar.host.url="${SONAR_URL}" \
             -Dsonar.token="${SONAR_TOKEN}" \
             -Dsonar.sources=src/main/java \
