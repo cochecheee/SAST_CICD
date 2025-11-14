@@ -22,10 +22,10 @@ jobs:
       # ========================================
       # SETUP
       # ========================================
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: gradle
       - name: Grant execute permission for gradlew
@@ -67,82 +67,50 @@ jobs:
       # ========================================
       # DEPENDENCY-CHECK
       # ========================================
-      - name: Cache Dependency-Check
+      - name: Cache Dependency-Check Data
         uses: actions/cache@v4
         with:
-          path: |
-            dependency-check
-            ~/.dependency-check/data
-          key: ${{ runner.os }}-dependency-check-10.0.4-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
+          path: ~/.dependency-check/data
+          key: ${{ runner.os }}-dependency-check-data-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-dependency-check-10.0.4-
-            ${{ runner.os }}-dependency-check-
-      - name: Install Dependency-Check
-        run: |
-          if [ ! -d "dependency-check" ]; then
-            echo "📥 Downloading Dependency-Check v10.0.4 (latest stable)..."
-            wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
-            unzip -q dependency-check-10.0.4-release.zip
-            echo "✅ Installation complete"
-          else
-            echo "✅ Using cached Dependency-Check"
-          fi
+            ${{ runner.os }}-dependency-check-data-
       - name: Run Dependency-Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          mkdir -p build/reports
           echo "🔍 Running Dependency-Check scan..."
-          
-          # Build command
-          CMD="./dependency-check/bin/dependency-check.sh"
-          CMD="$CMD --scan '**/*.gradle' --scan '**/build/dependencies'"  # More targeted scan for Gradle projects
-          CMD="$CMD --out build/reports"
-          CMD="$CMD --format XML"
-          CMD="$CMD --format JSON"
-          CMD="$CMD --format HTML"
-          CMD="$CMD --project sast-social"
-          CMD="$CMD --exclude '**/node_modules/**'"
-          CMD="$CMD --exclude '**/test/**'"
-          CMD="$CMD --exclude '**/.git/**'"
-          
-          # Add NVD API key if available
+          CMD="./gradlew dependencyCheckAnalyze --no-daemon --info"
           if [ -n "$NVD_API_KEY" ]; then
-            echo "✅ Using NVD API Key (faster updates)"
-            CMD="$CMD --nvdApiKey $NVD_API_KEY"
+            echo "✅ Using NVD API Key"
+            CMD="$CMD -PnvdApiKey=$NVD_API_KEY"
           else
-            echo "⚠️ No NVD API Key - get one at: https://nvd.nist.gov/developers/request-an-api-key"
+            echo "⚠️ No NVD API Key provided"
           fi
-          
-          # Add suppression file if exists
           if [ -f "dependency-check-suppressions.xml" ]; then
-            CMD="$CMD --suppression dependency-check-suppressions.xml"
+            CMD="$CMD -PsuppressionFile=dependency-check-suppressions.xml"
             echo "✅ Using suppression file"
           fi
-          
-          # Execute with error handling
           set +e
           $CMD
           EXIT_CODE=$?
           set -e
-          
           if [ $EXIT_CODE -eq 0 ]; then
             echo "✅ Dependency-Check completed successfully"
           elif [ -f "build/reports/dependency-check-report.xml" ]; then
             echo "⚠️ Dependency-Check completed with warnings but reports generated"
           else
             echo "❌ Dependency-Check failed, creating empty reports"
+            mkdir -p build/reports
             echo '<?xml version="1.0"?><analysis></analysis>' > build/reports/dependency-check-report.xml
             echo '{"dependencies":[]}' > build/reports/dependency-check-report.json
           fi
-          
           echo "📋 Generated reports:"
           ls -lh build/reports/ || echo "No reports found"
       # ========================================
       # BUILD & TEST
       # ========================================
       - name: Build with Gradle
-        run: ./gradlew clean build --no-daemon -x test
+        run: ./gradlew clean build --no-daemon
       # ========================================
       # SONARQUBE SCAN
       # ========================================
