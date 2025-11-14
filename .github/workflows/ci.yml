@@ -23,10 +23,10 @@ jobs:
       # SETUP
       # ========================================
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: gradle
 
@@ -82,17 +82,18 @@ jobs:
         with:
           path: |
             dependency-check
-            ~/.gradle/dependency-check-data
-          key: ${{ runner.os }}-dependency-check-10.0.4-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
+            ~/OWASP-Dependency-Check/data
+          key: ${{ runner.os }}-dependency-check-9.2.0-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-dependency-check-10.0.4-
+            ${{ runner.os }}-dependency-check-9.2.0-
+            ${{ runner.os }}-dependency-check-
 
       - name: Install Dependency-Check
         run: |
           if [ ! -d "dependency-check" ]; then
-            echo "📥 Downloading Dependency-Check v10.0.4..."
-            wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
-            unzip -q dependency-check-10.0.4-release.zip
+            echo "📥 Downloading Dependency-Check v9.2.0 (stable)..."
+            wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v9.2.0/dependency-check-9.2.0-release.zip
+            unzip -q dependency-check-9.2.0-release.zip
             echo "✅ Installation complete"
           else
             echo "✅ Using cached Dependency-Check"
@@ -103,36 +104,52 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           mkdir -p build/reports
+          echo "🔍 Running Dependency-Check scan..."
           
+          # Build command
           CMD="./dependency-check/bin/dependency-check.sh"
           CMD="$CMD --scan ."
           CMD="$CMD --out build/reports"
-          CMD="$CMD --format XML --format JSON --format HTML"
+          CMD="$CMD --format XML"
+          CMD="$CMD --format JSON"
+          CMD="$CMD --format HTML"
           CMD="$CMD --project aloute-spring"
-          CMD="$CMD --exclude '**/node_modules/**' --exclude '**/test/**' --exclude '**/.git/**'"
+          CMD="$CMD --exclude '**/node_modules/**'"
+          CMD="$CMD --exclude '**/test/**'"
+          CMD="$CMD --exclude '**/.git/**'"
           
+          # Add NVD API key if available
           if [ -n "$NVD_API_KEY" ]; then
-            echo "✅ Using NVD API Key"
-            CMD="$CMD --nvdApiKey $NVD_API_KEY --nvdApiDelay 6000"
+            echo "✅ Using NVD API Key (faster updates)"
+            CMD="$CMD --nvdApiKey $NVD_API_KEY"
           else
-            echo "⚠️ No NVD API Key - using offline mode"
-            CMD="$CMD --noupdate"
+            echo "⚠️ No NVD API Key - get one at: https://nvd.nist.gov/developers/request-an-api-key"
           fi
           
-          [ -f "dependency-check-suppressions.xml" ] && CMD="$CMD --suppression dependency-check-suppressions.xml"
+          # Add suppression file if exists
+          if [ -f "dependency-check-suppressions.xml" ]; then
+            CMD="$CMD --suppression dependency-check-suppressions.xml"
+            echo "✅ Using suppression file"
+          fi
           
-          CMD="$CMD --data ~/.gradle/dependency-check-data"
-          
+          # Execute with error handling
           set +e
           $CMD
           EXIT_CODE=$?
           set -e
           
-          if [ $EXIT_CODE -ne 0 ] && [ ! -f "build/reports/dependency-check-report.xml" ]; then
-            echo "⚠️ Creating empty reports to continue pipeline"
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✅ Dependency-Check completed successfully"
+          elif [ -f "build/reports/dependency-check-report.xml" ]; then
+            echo "⚠️ Dependency-Check completed with warnings but reports generated"
+          else
+            echo "❌ Dependency-Check failed, creating empty reports"
             echo '<?xml version="1.0"?><analysis></analysis>' > build/reports/dependency-check-report.xml
             echo '{"dependencies":[]}' > build/reports/dependency-check-report.json
           fi
+          
+          echo "📋 Generated reports:"
+          ls -lh build/reports/ || echo "No reports found"
 
       # ========================================
       # BUILD & TEST
@@ -141,8 +158,12 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build --no-daemon -x test
 
+      - name: Run Tests
+        run: ./gradlew test --no-daemon
+        continue-on-error: true
+
       # ========================================
-      # SONARQUBE SCAN (GRADLE PLUGIN)
+      # SONARQUBE SCAN
       # ========================================
 
       - name: Cache SonarQube packages
@@ -152,36 +173,6 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: Debug SonarQube Configuration
-        env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          echo "🔍 Checking SonarQube configuration..."
-          
-          if [ -z "$SONAR_HOST_URL" ]; then
-            echo "❌ ERROR: SONAR_HOST_URL is empty!"
-            exit 1
-          fi
-          
-          # Kiểm tra độ dài
-          URL_LENGTH=${#SONAR_HOST_URL}
-          echo "URL length: $URL_LENGTH characters"
-          
-          # Kiểm tra 10 ký tự đầu
-          URL_PREFIX="${SONAR_HOST_URL:0:10}"
-          echo "URL starts with: $URL_PREFIX"
-          
-          # Kiểm tra có http/https không
-          if [[ "$SONAR_HOST_URL" =~ ^https?:// ]]; then
-            echo "✅ URL has valid scheme (http/https)"
-          else
-            echo "❌ ERROR: URL missing http:// or https://"
-            echo "Please update the SONAR_HOST_URL secret to include the scheme"
-            exit 1
-          fi
-          
-          echo "✅ Configuration looks valid"
-
       - name: SonarQube Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -189,15 +180,46 @@ jobs:
         run: |
           echo "🚀 Starting SonarQube scan..."
           
+          # Validate configuration
+          if [ -z "$SONAR_HOST_URL" ]; then
+            echo "❌ ERROR: SONAR_HOST_URL is not set"
+            exit 1
+          fi
+          
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "❌ ERROR: SONAR_TOKEN is not set"
+            exit 1
+          fi
+          
+          # Remove trailing slash from URL if present
+          SONAR_URL="${SONAR_HOST_URL%/}"
+          
+          echo "Using SonarQube URL: $SONAR_URL"
+          
+          # Run SonarQube scan
           ./gradlew sonar \
             --info \
             --no-daemon \
             -Dsonar.projectKey=sast-social \
-            -Dsonar.host.url="${SONAR_HOST_URL}" \
+            -Dsonar.projectName=Asast-social \
+            -Dsonar.host.url="${SONAR_URL}" \
             -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.sources=src/main/java \
+            -Dsonar.tests=src/test/java \
+            -Dsonar.java.binaries=build/classes/java/main \
             -Dsonar.externalIssuesReportPaths=sonar-issues.json \
             -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
-            -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json
+            -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
+            -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**'
+
+      - name: Check SonarQube Quality Gate
+        uses: sonarsource/sonarqube-quality-gate-action@v1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          timeout: 300
+        continue-on-error: true
 
       # ========================================
       # DOCKER BUILD & SCAN
