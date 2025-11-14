@@ -22,10 +22,10 @@ jobs:
       # ========================================
       # SETUP
       # ========================================
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: gradle
       - name: Grant execute permission for gradlew
@@ -34,13 +34,13 @@ jobs:
       # CODEQL ANALYSIS
       # ========================================
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v3
         with:
           languages: java
       - name: Build for CodeQL
         run: ./gradlew build -x test --no-daemon
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v3
         with:
           category: "/language:java"
           upload: false
@@ -82,12 +82,12 @@ jobs:
           CMD="./gradlew dependencyCheckAnalyze --no-daemon --info"
           if [ -n "$NVD_API_KEY" ]; then
             echo "✅ Using NVD API Key"
-            CMD="$CMD -PnvdApiKey=$NVD_API_KEY"
+            CMD="$CMD -Porg.owasp.dependencycheck.nvd.apiKey=$NVD_API_KEY"
           else
             echo "⚠️ No NVD API Key provided"
           fi
           if [ -f "dependency-check-suppressions.xml" ]; then
-            CMD="$CMD -PsuppressionFile=dependency-check-suppressions.xml"
+            CMD="$CMD -Porg.owasp.dependencycheck.suppressionFile=dependency-check-suppressions.xml"
             echo "✅ Using suppression file"
           fi
           set +e
