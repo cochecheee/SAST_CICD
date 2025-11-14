@@ -1,91 +1,91 @@
-plugins {
-    id 'java'
-    id 'org.springframework.boot' version '2.7.18'
-    id 'io.spring.dependency-management' version '1.1.0'
-//    // add SonarScanner plugin
-//    id "org.sonarqube" version "6.3.1.5724"
-    id "org.sonarqube" version "5.1.0.4882"
-//    // scan dependency
-//    id 'org.owasp.dependencycheck' version '12.1.0'
-}
-
-group = 'com.nhoclahola'
-version = '0.0.1-SNAPSHOT'
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
-    }
-    all {
-        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
-    }
-}
-
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    implementation 'org.apache.logging.log4j:log4j-api:2.14.1'
-    implementation 'org.apache.logging.log4j:log4j-core:2.14.1'
-    implementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.14.1'
-
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
-    implementation 'org.springframework.boot:spring-boot-starter-mail'
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-data-jpa
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-
-    // https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client
-    implementation 'org.mariadb.jdbc:mariadb-java-client:3.0.11'
-
-    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-security
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-
-    // https://mvnrepository.com/artifact/io.jsonwebtoken/jjwt
-    implementation 'io.jsonwebtoken:jjwt:0.9.1'
-
-    implementation 'org.mapstruct:mapstruct:1.5.5.Final'
-    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
-    // https://mvnrepository.com/artifact/org.projectlombok/lombok-mapstruct-binding
-    implementation 'org.projectlombok:lombok-mapstruct-binding:0.1.0'
-
-    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-validation
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-
-    // https://mvnrepository.com/artifact/org.apache.tika/tika-core
-    implementation 'org.apache.tika:tika-core:2.9.2'
-
-    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-websocket
-    implementation 'org.springframework.boot:spring-boot-starter-websocket'
-
-    // https://mvnrepository.com/artifact/org.springframework.security/spring-security-messaging
-    implementation 'org.springframework.security:spring-security-messaging:5.7.11'
-
-    // https://mvnrepository.com/artifact/software.amazon.awssdk/aws-core
-    implementation 'software.amazon.awssdk:aws-core:2.27.17'
-
-    // https://mvnrepository.com/artifact/software.amazon.awssdk/s3
-    implementation 'software.amazon.awssdk:s3:2.27.17'
-    testImplementation 'software.amazon.awssdk:s3:2.27.17'
-
-    // https://mvnrepository.com/artifact/org.jsoup/jsoup - For URL Preview (SSRF vulnerability)
-    implementation 'org.jsoup:jsoup:1.15.3'
-
-    // MySQL Connector
-    runtimeOnly 'com.mysql:mysql-connector-j:8.2.0'
-}
+//plugins {
+//    id 'java'
+//    id 'org.springframework.boot' version '2.7.18'
+//    id 'io.spring.dependency-management' version '1.1.0'
+////    // add SonarScanner plugin
+////    id "org.sonarqube" version "6.3.1.5724"
+//    id "org.sonarqube" version "5.1.0.4882"
+////    // scan dependency
+////    id 'org.owasp.dependencycheck' version '12.1.0'
+//}
+//
+//group = 'com.nhoclahola'
+//version = '0.0.1-SNAPSHOT'
+//
+//java {
+//    toolchain {
+//        languageVersion = JavaLanguageVersion.of(21)
+//    }
+//}
+//
+//configurations {
+//    compileOnly {
+//        extendsFrom annotationProcessor
+//    }
+//    all {
+//        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+//    }
+//}
+//
+//repositories {
+//    mavenCentral()
+//}
+//
+//dependencies {
+//    implementation 'org.apache.logging.log4j:log4j-api:2.14.1'
+//    implementation 'org.apache.logging.log4j:log4j-core:2.14.1'
+//    implementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.14.1'
+//
+//    implementation 'org.springframework.boot:spring-boot-starter-web'
+//    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+//    implementation 'org.springframework.boot:spring-boot-starter-mail'
+//    compileOnly 'org.projectlombok:lombok'
+//    annotationProcessor 'org.projectlombok:lombok'
+//    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+//    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+//
+//    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-data-jpa
+//    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+//
+//    // https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client
+//    implementation 'org.mariadb.jdbc:mariadb-java-client:3.0.11'
+//
+//    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-security
+//    implementation 'org.springframework.boot:spring-boot-starter-security'
+//
+//    // https://mvnrepository.com/artifact/io.jsonwebtoken/jjwt
+//    implementation 'io.jsonwebtoken:jjwt:0.9.1'
+//
+//    implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+//    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+//    // https://mvnrepository.com/artifact/org.projectlombok/lombok-mapstruct-binding
+//    implementation 'org.projectlombok:lombok-mapstruct-binding:0.1.0'
+//
+//    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-validation
+//    implementation 'org.springframework.boot:spring-boot-starter-validation'
+//
+//    // https://mvnrepository.com/artifact/org.apache.tika/tika-core
+//    implementation 'org.apache.tika:tika-core:2.9.2'
+//
+//    // https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-websocket
+//    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+//
+//    // https://mvnrepository.com/artifact/org.springframework.security/spring-security-messaging
+//    implementation 'org.springframework.security:spring-security-messaging:5.7.11'
+//
+//    // https://mvnrepository.com/artifact/software.amazon.awssdk/aws-core
+//    implementation 'software.amazon.awssdk:aws-core:2.27.17'
+//
+//    // https://mvnrepository.com/artifact/software.amazon.awssdk/s3
+//    implementation 'software.amazon.awssdk:s3:2.27.17'
+//    testImplementation 'software.amazon.awssdk:s3:2.27.17'
+//
+//    // https://mvnrepository.com/artifact/org.jsoup/jsoup - For URL Preview (SSRF vulnerability)
+//    implementation 'org.jsoup:jsoup:1.15.3'
+//
+//    // MySQL Connector
+//    runtimeOnly 'com.mysql:mysql-connector-j:8.2.0'
+//}
 
 plugins {
     id 'java'

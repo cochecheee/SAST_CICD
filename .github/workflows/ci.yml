@@ -1,5 +1,4 @@
 name: CI Workflow (Gradle)
-
 on:
   push:
     branches:
@@ -7,51 +6,41 @@ on:
   pull_request:
     branches:
       - main
-
 jobs:
   ci:
     name: Security & Build Pipeline
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for better analysis
-
+          fetch-depth: 0 # Shallow clones should be disabled for better analysis
       # ========================================
       # SETUP
       # ========================================
-
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: gradle
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-
       # ========================================
       # CODEQL ANALYSIS
       # ========================================
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: java
-
       - name: Build for CodeQL
-        run: ./gradlew compileJava --no-daemon
-
+        run: ./gradlew build -x test --no-daemon
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:java"
           upload: false
           output: codeql-results
-
       - name: Copy SARIF file
         run: |
           if [ -f "codeql-results/java.sarif" ]; then
@@ -61,7 +50,6 @@ jobs:
             echo "⚠️ SARIF file not found, searching..."
             find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
           fi
-
       - name: Convert CodeQL SARIF to Sonar format
         run: |
           if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
@@ -72,33 +60,29 @@ jobs:
             echo "⚠️ Converter script not found, creating empty report"
             echo '{"issues":[]}' > sonar-issues.json
           fi
-
       # ========================================
       # DEPENDENCY-CHECK
       # ========================================
-
       - name: Cache Dependency-Check
         uses: actions/cache@v4
         with:
           path: |
             dependency-check
-            ~/OWASP-Dependency-Check/data
-          key: ${{ runner.os }}-dependency-check-9.2.0-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
+            ~/.dependency-check/data
+          key: ${{ runner.os }}-dependency-check-10.0.4-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-dependency-check-9.2.0-
+            ${{ runner.os }}-dependency-check-10.0.4-
             ${{ runner.os }}-dependency-check-
-
       - name: Install Dependency-Check
         run: |
           if [ ! -d "dependency-check" ]; then
-            echo "📥 Downloading Dependency-Check v9.2.0 (stable)..."
-            wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v9.2.0/dependency-check-9.2.0-release.zip
-            unzip -q dependency-check-9.2.0-release.zip
+            echo "📥 Downloading Dependency-Check v10.0.4 (latest stable)..."
+            wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
+            unzip -q dependency-check-10.0.4-release.zip
             echo "✅ Installation complete"
           else
             echo "✅ Using cached Dependency-Check"
           fi
-
       - name: Run Dependency-Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
@@ -108,12 +92,12 @@ jobs:
           
           # Build command
           CMD="./dependency-check/bin/dependency-check.sh"
-          CMD="$CMD --scan ."
+          CMD="$CMD --scan '**/*.gradle' --scan '**/build/dependencies'"  # More targeted scan for Gradle projects
           CMD="$CMD --out build/reports"
           CMD="$CMD --format XML"
           CMD="$CMD --format JSON"
           CMD="$CMD --format HTML"
-          CMD="$CMD --project aloute-spring"
+          CMD="$CMD --project sast-social"
           CMD="$CMD --exclude '**/node_modules/**'"
           CMD="$CMD --exclude '**/test/**'"
           CMD="$CMD --exclude '**/.git/**'"
@@ -150,29 +134,20 @@ jobs:
           
           echo "📋 Generated reports:"
           ls -lh build/reports/ || echo "No reports found"
-
       # ========================================
       # BUILD & TEST
       # ========================================
-
       - name: Build with Gradle
-        run: ./gradlew clean build --no-daemon -x test
-
-      - name: Run Tests
-        run: ./gradlew test --no-daemon
-        continue-on-error: true
-
+        run: ./gradlew clean build --no-daemon
       # ========================================
       # SONARQUBE SCAN
       # ========================================
-
       - name: Cache SonarQube packages
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
-
       - name: SonarQube Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -211,23 +186,20 @@ jobs:
             -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
             -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
             -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**'
-
       - name: Check SonarQube Quality Gate
-        uses: sonarsource/sonarqube-quality-gate-action@v1
+        uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
+          scanMetadataReportFile: build/sonar/report-task.txt
           timeout: 300
         continue-on-error: true
-
       # ========================================
       # DOCKER BUILD & SCAN
       # ========================================
-
       - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
-
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -237,20 +209,16 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-
       # ========================================
       # UPLOAD ARTIFACTS
       # ========================================
-
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
         with:
