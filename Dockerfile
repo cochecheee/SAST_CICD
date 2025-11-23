@@ -15,7 +15,7 @@ COPY src ./src
 RUN gradle clean build -x test
 
 # Use the official JDK image to run the application
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jre-jammy
 
 # Set the working directory in the container to /app
 WORKDIR /app
