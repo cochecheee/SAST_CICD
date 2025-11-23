@@ -63,7 +63,7 @@ jwt:
 cloud:
   aws:
     s3:
-      enabled: ${AWS_S3_ENABLED:false}  # Default disabled
+      enabled: false
     credentials:
       access-key: ${S3_ACCESS_KEY:}
       secret-key: ${S3_SECRET_KEY:}
@@ -75,8 +75,7 @@ cloud:
       name: ${S3_BUCKET_NAME:nhom3-social-network-storage}
 
 server:
-  address: 0.0.0.0
-  port: 8081
+  port: ${PORT:8080}
 
 cors:
   allowed:
