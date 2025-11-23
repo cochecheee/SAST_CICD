@@ -154,9 +154,9 @@ jobs:
             -Dsonar.sources=src/main/java \
             -Dsonar.tests=src/test/java \
             -Dsonar.java.binaries=build/classes/java/main \
-            -Dsonar.externalIssuesReportPaths=sonar-issues.json \
-            -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
-            -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
+#            -Dsonar.externalIssuesReportPaths=sonar-issues.json \
+#            -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
+#            -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
             -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**'
       - name: Check SonarQube Quality Gate
         uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
