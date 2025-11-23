@@ -35,31 +35,146 @@ jobs:
           docker inspect ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
           echo "✅ Image verified"
 
-      - name: Deploy to Render
+      - name: Check if Render Service Exists
+        id: check_service
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-          DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+          SERVICE_NAME: aloute-spring-app
         run: |
-          echo "🚀 Deploying to Render..."
+          echo "🔍 Checking if service exists..."
           
-          # Create JSON payload
-          JSON_PAYLOAD=$(cat <<EOF
+          # List all services and check if our service exists
+          SERVICES=$(curl -s \
+            "https://api.render.com/v1/services?name=${SERVICE_NAME}" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}")
+          
+          SERVICE_ID=$(echo "$SERVICES" | jq -r '.[0].service.id // empty')
+          
+          if [ -z "$SERVICE_ID" ]; then
+            echo "service_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Service not found, will create new one"
+          else
+            echo "service_exists=true" >> $GITHUB_OUTPUT
+            echo "existing_service_id=$SERVICE_ID" >> $GITHUB_OUTPUT
+            echo "✅ Found existing service: $SERVICE_ID"
+          fi
+
+      - name: Create Render Service
+        if: steps.check_service.outputs.service_exists == 'false'
+        id: create_service
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          echo "🆕 Creating new Render service..."
+          
+          # Create service payload
+          PAYLOAD=$(cat <<EOF
           {
-            "clearCache": false,
-            "imageUrl": "docker.io/${DOCKER_IMAGE}"
+            "type": "web_service",
+            "name": "aloute-spring-app",
+            "ownerId": "OWNER_ID_PLACEHOLDER",
+            "repo": "",
+            "autoDeploy": "no",
+            "image": {
+              "ownerId": "OWNER_ID_PLACEHOLDER",
+              "registryCredential": {
+                "name": "docker-hub-creds",
+                "username": "${DOCKER_USERNAME}",
+                "password": "${DOCKER_PASSWORD}"
+              },
+              "imagePath": "docker.io/${DOCKER_IMAGE}"
+            },
+            "serviceDetails": {
+              "env": "docker",
+              "envSpecificDetails": {
+                "docker": {
+                  "dockerCommand": "",
+                  "dockerContext": "."
+                }
+              },
+              "region": "oregon",
+              "plan": "free",
+              "pullRequestPreviewsEnabled": "no",
+              "healthCheckPath": "/actuator/health",
+              "numInstances": 1,
+              "openPorts": [
+                {
+                  "port": 8080,
+                  "protocol": "TCP"
+                }
+              ]
+            }
           }
           EOF
           )
           
-          echo "Payload: $JSON_PAYLOAD"
+          # Get owner ID first
+          OWNER_INFO=$(curl -s \
+            "https://api.render.com/v1/owners" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}")
           
-          # Trigger Render deployment
+          OWNER_ID=$(echo "$OWNER_INFO" | jq -r '.[0].owner.id // empty')
+          
+          if [ -z "$OWNER_ID" ]; then
+            echo "❌ Failed to get owner ID"
+            echo "Response: $OWNER_INFO"
+            exit 1
+          fi
+          
+          echo "✅ Owner ID: $OWNER_ID"
+          
+          # Replace placeholder with actual owner ID
+          PAYLOAD=$(echo "$PAYLOAD" | sed "s/OWNER_ID_PLACEHOLDER/${OWNER_ID}/g")
+          
+          echo "Creating service with payload..."
+          
+          # Create service
           RESPONSE=$(curl -X POST \
-            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            "https://api.render.com/v1/services" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Content-Type: application/json" \
-            --data-raw "$JSON_PAYLOAD")
+            --data-raw "$PAYLOAD")
+          
+          echo "Response: $RESPONSE"
+          
+          SERVICE_ID=$(echo "$RESPONSE" | jq -r '.service.id // .id // empty')
+          
+          if [ -z "$SERVICE_ID" ]; then
+            echo "❌ Failed to create service"
+            ERROR_MSG=$(echo "$RESPONSE" | jq -r '.message // .error // "Unknown error"')
+            echo "Error: $ERROR_MSG"
+            exit 1
+          fi
+          
+          echo "new_service_id=$SERVICE_ID" >> $GITHUB_OUTPUT
+          echo "✅ Service created successfully: $SERVICE_ID"
+
+      - name: Set Service ID
+        id: set_service
+        run: |
+          if [ "${{ steps.check_service.outputs.service_exists }}" == "true" ]; then
+            echo "service_id=${{ steps.check_service.outputs.existing_service_id }}" >> $GITHUB_OUTPUT
+          else
+            echo "service_id=${{ steps.create_service.outputs.new_service_id }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: ${{ steps.set_service.outputs.service_id }}
+        run: |
+          echo "🚀 Deploying to Render..."
+          echo "Service ID: ${SERVICE_ID}"
+          
+          # Trigger deployment
+          RESPONSE=$(curl -X POST \
+            "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": "clear"}')
           
           echo "Response: $RESPONSE"
           
@@ -69,7 +184,6 @@ jobs:
             echo "❌ Failed to trigger deployment"
             ERROR_MSG=$(echo "$RESPONSE" | jq -r '.message // .error // "Unknown error"')
             echo "Error details: $ERROR_MSG"
-            echo "Full response: $RESPONSE"
             exit 1
           fi
           
@@ -78,15 +192,15 @@ jobs:
           
           # Wait for deployment to complete
           echo "⏳ Waiting for deployment to complete..."
-          MAX_WAIT=900  # 15 minutes for Docker pull + deploy
+          MAX_WAIT=900
           ELAPSED=0
           
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             DEPLOY_STATUS=$(curl -s \
-              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \
+              "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
               -H "Authorization: Bearer ${RENDER_API_KEY}")
           
-            STATUS=$(echo "$DEPLOY_STATUS" | jq -r '.status // "unknown"')
+            STATUS=$(echo "$DEPLOY_STATUS" | jq -r '.deploy.status // .status // "unknown"')
           
             echo "[${ELAPSED}s] Status: $STATUS"
           
@@ -95,19 +209,15 @@ jobs:
           
               # Get service URL
               SERVICE_INFO=$(curl -s \
-                "https://api.render.com/v1/services/${RENDER_SERVICE_ID}" \
+                "https://api.render.com/v1/services/${SERVICE_ID}" \
                 -H "Authorization: Bearer ${RENDER_API_KEY}")
           
-              SERVICE_URL=$(echo "$SERVICE_INFO" | jq -r '.service.serviceDetails.url // .serviceDetails.url // "URL not available"')
+              SERVICE_URL=$(echo "$SERVICE_INFO" | jq -r '.service.serviceDetails.url // "URL not available"')
               echo "🌐 Service URL: https://${SERVICE_URL}"
               exit 0
             elif [ "$STATUS" == "build_failed" ] || [ "$STATUS" == "deploy_failed" ] || [ "$STATUS" == "canceled" ]; then
               echo "❌ Deployment failed with status: $STATUS"
-              echo "Details: $DEPLOY_STATUS"
               exit 1
-            elif [ "$STATUS" == "unknown" ]; then
-              echo "⚠️ Could not retrieve deployment status"
-              echo "Response: $DEPLOY_STATUS"
             fi
           
             sleep 30
@@ -115,7 +225,6 @@ jobs:
           done
           
           echo "⚠️ Deployment timeout after ${MAX_WAIT}s"
-          echo "Last known status: $STATUS"
           exit 1
 
       - name: Deployment Summary
@@ -125,7 +234,7 @@ jobs:
           echo "📦 DEPLOYMENT SUMMARY"
           echo "================================================"
           echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest"
-          echo "Render Service ID: ${{ secrets.RENDER_SERVICE_ID }}"
+          echo "Service ID: ${{ steps.set_service.outputs.service_id }}"
+          echo "Service Exists: ${{ steps.check_service.outputs.service_exists }}"
           echo "Workflow Run: ${{ github.run_number }}"
-          echo "Triggered by: ${{ github.event.workflow_run.head_commit.message }}"
           echo "================================================"
