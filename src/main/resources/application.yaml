@@ -183,7 +183,7 @@ aws:
       key: ${AWS_SECRET_ACCESS_KEY:}
   region: ${AWS_REGION:ap-southeast-1}
   bucket:
-    name: ${AWS_BUCKET_NAME:}
+    name: ${S3_BUCKET_NAME:}
 
 
 # Server Configuration
