@@ -30,7 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${aws.s3.enabled:false}")
     private boolean s3Enabled;
 
-    @Value("${cloud.aws.bucket.name:}")
+    @Value("${aws.bucket.name:}")
     private String bucketNameInstance;
 
     private static S3Client s3Client;

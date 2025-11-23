@@ -19,7 +19,6 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "aws.s3.enabled", havingValue = "true")
 public class VideoAwsS3UploadServiceImplementation implements FileUploadService
 {
     private final Tika tika;

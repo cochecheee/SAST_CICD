@@ -182,12 +182,9 @@ aws:
     access:
       key: ${AWS_SECRET_ACCESS_KEY:}
   region: ${AWS_REGION:ap-southeast-1}
+  bucket:
+    name: ${AWS_BUCKET_NAME:}
 
-# Cloud AWS (for WebConfig compatibility)
-cloud:
-  aws:
-    bucket:
-      name: ${AWS_BUCKET_NAME:}
 
 # Server Configuration
 server:
