@@ -1,153 +1,20 @@
-#spring:
-#  profiles:
-#    active: ${SPRING_PROFILES_ACTIVE:dev}
-#
-#---
-## Development profile (MySQL local)
-#spring:
-#  config:
-#    activate:
-#      on-profile: dev
-#  datasource:
-#    url: jdbc:mysql://localhost:3306/social_network_v1?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-#    username: root
-#    password:
-#    driver-class-name: com.mysql.cj.jdbc.Driver
-#  jpa:
-#    hibernate:
-#      ddl-auto: update
-#    show-sql: true
-#
-#---
-## Production profile (H2 in-memory)
-#spring:
-#  config:
-#    activate:
-#      on-profile: prod
-#  datasource:
-#    url: jdbc:h2:mem:social_network
-#    driver-class-name: org.h2.Driver
-#    username: sa
-#    password:
-#  jpa:
-#    hibernate:
-#      ddl-auto: create-drop
-#    database-platform: org.hibernate.dialect.H2Dialect
-#    show-sql: false
-#  h2:
-#    console:
-#      enabled: false
-#  mvc:
-#    servlet:
-#      load-on-startup: 1
-#  servlet:
-#    multipart:
-#      max-file-size: 50MB
-#      max-request-size: 50MB
-#
-#  mail:
-#    host: smtp.gmail.com
-#    port: 587
-#    username: nlg.bao1340@gmail.com
-#    password: auvx cvzl lkgx smrc
-#    properties:
-#      mail:
-#        smtp:
-#          auth: true
-#          starttls:
-#            enable: true
-#
-#
-#jwt:
-#  privateKey: ${JWT_TOKEN:}
-#
-##cloud:
-##  aws:
-##    s3:
-##      enabled: false
-##    credentials:
-##      access-key: ${S3_ACCESS_KEY:}
-##      secret-key: ${S3_SECRET_KEY:}
-##    region:
-##      static: ${S3_REGION:ap-southeast-2}
-##    stack:
-##      auto: false
-##    buket:
-##      name: ${S3_BUCKET_NAME:nhom3-social-network-storage}
-## AWS S3 Configuration
-#aws:
-#  s3:
-#    enabled: ${AWS_S3_ENABLED:false}
-#  access:
-#    key:
-#      id: ${AWS_ACCESS_KEY_ID:}
-#  secret:
-#    access:
-#      key: ${AWS_SECRET_ACCESS_KEY:}
-#  region: ${AWS_REGION:ap-southeast-1}
-#
-## Cloud AWS (for WebConfig compatibility)
-#cloud:
-#  aws:
-#    bucket:
-#      name: ${AWS_BUCKET_NAME:}
-#
-#server:
-#  port: ${PORT:8080}
-#  address: 0.0.0.0
-#
-#cors:
-#  allowed:
-#    origins: https://social-network-react-js-mosxy6ru7-nhoclaholas-projects.vercel.app, http://localhost:3000, http://localhost:8080, http://localhost:8081, https://social-network-react-js-ui.vercel.app, http://social-network-v1.kesug.com
-
 spring:
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}
-
----
-# Development profile (MySQL local)
-spring:
-  config:
-    activate:
-      on-profile: dev
+  application:
+    name: social-network-v1
+  #  datasource:
+  #    url: ${DBMS_CONNECTION:jdbc:mariadb://localhost:3306/social_network_v1}
+  #    username: root
+  #    password: ${MYSQL_ROOT_PASSWORD:}
+  #    driver-class-name: org.mariadb.jdbc.Driver
   datasource:
-    url: jdbc:mysql://localhost:3306/social_network_v1?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-    username: root
-    password:
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/social_network_v1?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_ROOT_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
-  servlet:
-    multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
-
----
-# Production profile (H2 in-memory)
-spring:
-  config:
-    activate:
-      on-profile: prod
-  datasource:
-    url: jdbc:h2:mem:social_network
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-      naming:
-        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
-    database-platform: org.hibernate.dialect.H2Dialect
-    show-sql: false
-    properties:
-      hibernate:
-        globally_quoted_identifiers: true  # Fix "user" keyword issue
-  h2:
-    console:
-      enabled: false
   mvc:
     servlet:
       load-on-startup: 1
@@ -167,31 +34,27 @@ spring:
           starttls:
             enable: true
 
-# JWT Configuration
 jwt:
-  privateKey: ${JWT_TOKEN:default-secret-key-change-in-production}
+  privateKey: ${JWT_TOKEN:}
 
-# AWS S3 Configuration
-aws:
-  s3:
+cloud:
+  aws:
     enabled: false
-  access:
-    key:
-      id: ${AWS_ACCESS_KEY_ID:}
-  secret:
-    access:
-      key: ${AWS_SECRET_ACCESS_KEY:}
-  region: ${AWS_REGION:ap-southeast-1}
-  bucket:
-    name: ${S3_BUCKET_NAME:}
+    credentials:
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
+    region:
+      static: ${S3_REGION:ap-southeast-2}
+    stack:
+      auto: false
+    buket:
+#      name: ${S3_BUCKET_NAME:nhom3-social-network-storage}
+      name: dummy-bucket
 
-
-# Server Configuration
 server:
-  port: ${PORT:8080}
   address: 0.0.0.0
+  port: 8081
 
-# CORS Configuration
 cors:
   allowed:
-    origins: https://social-network-react-js-mosxy6ru7-nhoclaholas-projects.vercel.app,http://localhost:3000,http://localhost:8080,http://localhost:8081,https://social-network-react-js-ui.vercel.app,http://social-network-v1.kesug.com
+    origins: https://social-network-react-js-mosxy6ru7-nhoclaholas-projects.vercel.app, http://localhost:3000, http://localhost:8080, http://localhost:8081, https://social-network-react-js-ui.vercel.app, http://social-network-v1.kesug.com
