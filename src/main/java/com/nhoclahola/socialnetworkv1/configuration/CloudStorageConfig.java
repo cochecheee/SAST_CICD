@@ -22,11 +22,6 @@ public class CloudStorageConfig {
     private String awsRegion;
 
     @Bean
-    @ConditionalOnProperty(
-            name = "aws.s3.enabled",
-            havingValue = "true",
-            matchIfMissing = false
-    )
     public S3Client generateS3Client() {
         if (awsAccessKeyId == null || awsAccessKeyId.isBlank() ||
                 awsSecretAccessKey == null || awsSecretAccessKey.isBlank()) {
