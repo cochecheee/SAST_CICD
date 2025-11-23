@@ -174,7 +174,7 @@ jwt:
 # AWS S3 Configuration
 aws:
   s3:
-    enabled: ${AWS_S3_ENABLED:false}
+    enabled: false
   access:
     key:
       id: ${AWS_ACCESS_KEY_ID:}
