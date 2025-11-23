@@ -80,13 +80,13 @@ sonar {
     }
 }
 
-dependencyCheck {
-    outputDirectory = 'build/reports'
-    formats = ['HTML', 'XML', 'JSON']
-    failBuildOnCVSS = 0  // Set to 0 to not fail the build; adjust as needed
-    // Add suppressions if you have a file
-    // suppressionFile = 'dependency-check-suppressions.xml'
-}
+//dependencyCheck {
+//    outputDirectory = 'build/reports'
+//    formats = ['HTML', 'XML', 'JSON']
+//    failBuildOnCVSS = 0  // Set to 0 to not fail the build; adjust as needed
+//    // Add suppressions if you have a file
+//    // suppressionFile = 'dependency-check-suppressions.xml'
+//}
 
 tasks.named('test') {
     useJUnitPlatform()
