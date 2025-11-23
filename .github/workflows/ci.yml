@@ -33,79 +33,79 @@ jobs:
       # ========================================
       # CODEQL ANALYSIS
       # ========================================
-#      - name: Initialize CodeQL
-#        uses: github/codeql-action/init@v4
-#        with:
-#          languages: java
-#      - name: Build for CodeQL
-#        run: ./gradlew build -x test --no-daemon
-#      - name: Perform CodeQL Analysis
-#        uses: github/codeql-action/analyze@v4
-#        with:
-#          category: "/language:java"
-#          upload: false
-#          output: codeql-results
-#      - name: Copy SARIF file
-#        run: |
-#          if [ -f "codeql-results/java.sarif" ]; then
-#            cp codeql-results/java.sarif codeql-results.sarif
-#            echo "✅ Copied SARIF file"
-#          else
-#            echo "⚠️ SARIF file not found, searching..."
-#            find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
-#          fi
-#      - name: Convert CodeQL SARIF to Sonar format
-#        run: |
-#          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
-#            python scripts/convert_codeql_to_sonar.py \
-#              --input codeql-results.sarif \
-#              --output sonar-issues.json
-#          else
-#            echo "⚠️ Converter script not found, creating empty report"
-#            echo '{"issues":[]}' > sonar-issues.json
-#          fi
+      #      - name: Initialize CodeQL
+      #        uses: github/codeql-action/init@v4
+      #        with:
+      #          languages: java
+      #      - name: Build for CodeQL
+      #        run: ./gradlew build -x test --no-daemon
+      #      - name: Perform CodeQL Analysis
+      #        uses: github/codeql-action/analyze@v4
+      #        with:
+      #          category: "/language:java"
+      #          upload: false
+      #          output: codeql-results
+      #      - name: Copy SARIF file
+      #        run: |
+      #          if [ -f "codeql-results/java.sarif" ]; then
+      #            cp codeql-results/java.sarif codeql-results.sarif
+      #            echo "✅ Copied SARIF file"
+      #          else
+      #            echo "⚠️ SARIF file not found, searching..."
+      #            find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
+      #          fi
+      #      - name: Convert CodeQL SARIF to Sonar format
+      #        run: |
+      #          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
+      #            python scripts/convert_codeql_to_sonar.py \
+      #              --input codeql-results.sarif \
+      #              --output sonar-issues.json
+      #          else
+      #            echo "⚠️ Converter script not found, creating empty report"
+      #            echo '{"issues":[]}' > sonar-issues.json
+      #          fi
       # ========================================
       # DEPENDENCY-CHECK
       # ========================================
-#      - name: Cache Dependency-Check Data
-#        uses: actions/cache@v4
-#        with:
-#          path: ~/.dependency-check/data
-#          key: ${{ runner.os }}-dependency-check-data-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
-#          restore-keys: |
-#            ${{ runner.os }}-dependency-check-data-
-#      - name: Run Dependency-Check
-#        env:
-#          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-#        run: |
-#          echo "🔍 Running Dependency-Check scan..."
-#          CMD="./gradlew dependencyCheckAnalyze --no-daemon --info"
-#          if [ -n "$NVD_API_KEY" ]; then
-#            echo "✅ Using NVD API Key"
-#            CMD="$CMD -Porg.owasp.dependencycheck.nvd.apiKey=$NVD_API_KEY"
-#          else
-#            echo "⚠️ No NVD API Key provided"
-#          fi
-#          if [ -f "dependency-check-suppressions.xml" ]; then
-#            CMD="$CMD -Porg.owasp.dependencycheck.suppressionFile=dependency-check-suppressions.xml"
-#            echo "✅ Using suppression file"
-#          fi
-#          set +e
-#          $CMD
-#          EXIT_CODE=$?
-#          set -e
-#          if [ $EXIT_CODE -eq 0 ]; then
-#            echo "✅ Dependency-Check completed successfully"
-#          elif [ -f "build/reports/dependency-check-report.xml" ]; then
-#            echo "⚠️ Dependency-Check completed with warnings but reports generated"
-#          else
-#            echo "❌ Dependency-Check failed, creating empty reports"
-#            mkdir -p build/reports
-#            echo '<?xml version="1.0"?><analysis></analysis>' > build/reports/dependency-check-report.xml
-#            echo '{"dependencies":[]}' > build/reports/dependency-check-report.json
-#          fi
-#          echo "📋 Generated reports:"
-#          ls -lh build/reports/ || echo "No reports found"
+      #      - name: Cache Dependency-Check Data
+      #        uses: actions/cache@v4
+      #        with:
+      #          path: ~/.dependency-check/data
+      #          key: ${{ runner.os }}-dependency-check-data-${{ hashFiles('**/build.gradle', '**/build.gradle.kts') }}
+      #          restore-keys: |
+      #            ${{ runner.os }}-dependency-check-data-
+      #      - name: Run Dependency-Check
+      #        env:
+      #          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      #        run: |
+      #          echo "🔍 Running Dependency-Check scan..."
+      #          CMD="./gradlew dependencyCheckAnalyze --no-daemon --info"
+      #          if [ -n "$NVD_API_KEY" ]; then
+      #            echo "✅ Using NVD API Key"
+      #            CMD="$CMD -Porg.owasp.dependencycheck.nvd.apiKey=$NVD_API_KEY"
+      #          else
+      #            echo "⚠️ No NVD API Key provided"
+      #          fi
+      #          if [ -f "dependency-check-suppressions.xml" ]; then
+      #            CMD="$CMD -Porg.owasp.dependencycheck.suppressionFile=dependency-check-suppressions.xml"
+      #            echo "✅ Using suppression file"
+      #          fi
+      #          set +e
+      #          $CMD
+      #          EXIT_CODE=$?
+      #          set -e
+      #          if [ $EXIT_CODE -eq 0 ]; then
+      #            echo "✅ Dependency-Check completed successfully"
+      #          elif [ -f "build/reports/dependency-check-report.xml" ]; then
+      #            echo "⚠️ Dependency-Check completed with warnings but reports generated"
+      #          else
+      #            echo "❌ Dependency-Check failed, creating empty reports"
+      #            mkdir -p build/reports
+      #            echo '<?xml version="1.0"?><analysis></analysis>' > build/reports/dependency-check-report.xml
+      #            echo '{"dependencies":[]}' > build/reports/dependency-check-report.json
+      #          fi
+      #          echo "📋 Generated reports:"
+      #          ls -lh build/reports/ || echo "No reports found"
       # ========================================
       # BUILD & TEST
       # ========================================
@@ -125,39 +125,39 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "🚀 Starting SonarQube scan..."
-          
-          # Validate configuration
-          if [ -z "$SONAR_HOST_URL" ]; then
-            echo "❌ ERROR: SONAR_HOST_URL is not set"
-            exit 1
-          fi
-          
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "❌ ERROR: SONAR_TOKEN is not set"
-            exit 1
-          fi
-          
-          # Remove trailing slash from URL if present
-          SONAR_URL="${SONAR_HOST_URL%/}"
-          
-          echo "Using SonarQube URL: $SONAR_URL"
-          
-          # Run SonarQube scan
-          ./gradlew sonar \
-            --info \
-            --no-daemon \
-            -Dsonar.projectKey=sast-social \
-            -Dsonar.projectName=sast-social \
-            -Dsonar.host.url="${SONAR_URL}" \
-            -Dsonar.token="${SONAR_TOKEN}" \
-            -Dsonar.sources=src/main/java \
-            -Dsonar.tests=src/test/java \
-            -Dsonar.java.binaries=build/classes/java/main \
-#            -Dsonar.externalIssuesReportPaths=sonar-issues.json \
-#            -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
-#            -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
-            -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**'
+               echo "🚀 Starting SonarQube scan..."
+               
+               # Validate configuration
+               if [ -z "$SONAR_HOST_URL" ]; then
+               echo "❌ ERROR: SONAR_HOST_URL is not set"
+               exit 1
+               fi
+               
+               if [ -z "$SONAR_TOKEN" ]; then
+               echo "❌ ERROR: SONAR_TOKEN is not set"
+               exit 1
+               fi
+               
+               # Remove trailing slash from URL if present
+               SONAR_URL="${SONAR_HOST_URL%/}"
+               
+               echo "Using SonarQube URL: $SONAR_URL"
+               
+               # Run SonarQube scan
+               ./gradlew sonar \
+               --info \
+               --no-daemon \
+               -Dsonar.projectKey=sast-social \
+               -Dsonar.projectName=sast-social \
+               -Dsonar.host.url="${SONAR_URL}" \
+               -Dsonar.token="${SONAR_TOKEN}" \
+               -Dsonar.sources=src/main/java \
+               -Dsonar.tests=src/test/java \
+               -Dsonar.java.binaries=build/classes/java/main \
+          #            -Dsonar.externalIssuesReportPaths=sonar-issues.json \
+          #            -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
+          #            -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
+               -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**'
       - name: Check SonarQube Quality Gate
         uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
         env:
@@ -192,6 +192,7 @@ jobs:
       # UPLOAD ARTIFACTS
       # ========================================
       - name: Upload Security Reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
@@ -200,4 +201,3 @@ jobs:
             sonar-issues.json
             codeql-results.sarif
             codeql-results/java.sarif
-        if: always()
