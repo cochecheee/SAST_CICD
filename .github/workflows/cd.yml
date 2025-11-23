@@ -16,20 +16,94 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build with Gradle
+      - name: Pull Docker Image from CI
         run: |
-          chmod +x gradlew
-          ./gradlew clean build -x test
+          echo "🐳 Pulling Docker image from Docker Hub..."
+          docker pull ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+          echo "✅ Image pulled successfully"
+          docker images | grep aloute-spring
+
+      - name: Verify Docker Image
+        run: |
+          echo "🔍 Verifying Docker image..."
+          docker inspect ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+          echo "✅ Image verified"
 
       - name: Deploy to Render
-        uses: render/deploy-action@v1
-        with:
-          api-key: ${{ secrets.RENDER_API_KEY }}
-          service-id: ${{ secrets.RENDER_SERVICE_ID }}
-          wait-for-success: true
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "🚀 Deploying to Render..."
+          
+          # Trigger Render deployment
+          RESPONSE=$(curl -X POST \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "clearCache": false,
+              "imageUrl": "docker.io/${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest"
+            }')
+          
+          echo "Response: $RESPONSE"
+          
+          DEPLOY_ID=$(echo $RESPONSE | jq -r '.id')
+          
+          if [ "$DEPLOY_ID" == "null" ] || [ -z "$DEPLOY_ID" ]; then
+            echo "❌ Failed to trigger deployment"
+            echo "Error details: $(echo $RESPONSE | jq -r '.message // .error // .')"
+            exit 1
+          fi
+          
+          echo "✅ Deployment triggered successfully"
+          echo "Deploy ID: $DEPLOY_ID"
+          
+          # Wait for deployment to complete
+          echo "⏳ Waiting for deployment to complete..."
+          MAX_WAIT=900  # 15 minutes for Docker pull + deploy
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            DEPLOY_STATUS=$(curl -s \
+              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}")
+          
+            STATUS=$(echo $DEPLOY_STATUS | jq -r '.status')
+          
+            echo "[${ELAPSED}s] Status: $STATUS"
+          
+            if [ "$STATUS" == "live" ]; then
+              echo "✅ Deployment completed successfully!"
+              echo "🌐 Service URL: https://$(curl -s https://api.render.com/v1/services/${RENDER_SERVICE_ID} -H 'Authorization: Bearer ${RENDER_API_KEY}' | jq -r '.serviceDetails.url')"
+              exit 0
+            elif [ "$STATUS" == "build_failed" ] || [ "$STATUS" == "deploy_failed" ] || [ "$STATUS" == "canceled" ]; then
+              echo "❌ Deployment failed with status: $STATUS"
+              echo "Details: $(echo $DEPLOY_STATUS | jq -r '.deployLogs // "No logs available"')"
+              exit 1
+            fi
+          
+            sleep 30
+            ELAPSED=$((ELAPSED + 30))
+          done
+          
+          echo "⚠️ Deployment timeout after ${MAX_WAIT}s"
+          echo "Last known status: $STATUS"
+          exit 1
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "================================================"
+          echo "📦 DEPLOYMENT SUMMARY"
+          echo "================================================"
+          echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest"
+          echo "Render Service ID: ${{ secrets.RENDER_SERVICE_ID }}"
+          echo "Workflow Run: ${{ github.run_number }}"
+          echo "================================================"
