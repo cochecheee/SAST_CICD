@@ -6,6 +6,7 @@ on:
   pull_request:
     branches:
       - main
+
 jobs:
   ci:
     name: Security & Build Pipeline
@@ -65,6 +66,24 @@ jobs:
             echo '{"issues":[]}' > sonar-issues.json
           fi
       # ========================================
+      # CHECK CODEQL RESULTS
+      # ========================================
+      - name: Check CodeQL Results
+        run: |
+          if [ -f "codeql-results.sarif" ]; then
+            CRITICAL_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
+            HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
+          
+            echo "🔍 CodeQL Results:"
+            echo "  - Critical/Error: $CRITICAL_COUNT"
+            echo "  - High/Warning: $HIGH_COUNT"
+          
+            if [ "$CRITICAL_COUNT" -gt "0" ]; then
+              echo "❌ CodeQL found $CRITICAL_COUNT critical issues!"
+              exit 1
+            fi
+          fi
+      # ========================================
       # BUILD & TEST
       # ========================================
       - name: Build with Gradle
@@ -105,12 +124,8 @@ jobs:
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Successfully connected to SonarQube"
           else
-            echo "⚠️ Warning: Cannot connect to SonarQube (HTTP $HTTP_CODE)"
-            echo "Please check:"
-            echo "  1. SONAR_HOST_URL is correct and accessible"
-            echo "  2. SONAR_TOKEN is valid"
-            echo "  3. SonarQube server is running"
-            echo "  4. Network/firewall allows connection"
+            echo "❌ Cannot connect to SonarQube (HTTP $HTTP_CODE)"
+            exit 1
           fi
       - name: SonarQube Scan with Dependency-Check
         env:
@@ -131,7 +146,6 @@ jobs:
             echo "⚠️ No NVD API Key provided"
           fi
           
-          set +e
           ./gradlew sonar \
             --info \
             --no-daemon \
@@ -146,19 +160,9 @@ jobs:
             -Dsonar.externalIssuesReportPaths=sonar-issues.json \
             $GRADLE_OPTS
           
-          EXIT_CODE=$?
-          set -e
-          
-          if [ $EXIT_CODE -eq 0 ]; then
-            echo "✅ SonarQube scan completed successfully"
-          else
-            echo "⚠️ SonarQube scan failed with exit code $EXIT_CODE"
-            echo "Continuing workflow..."
-          fi
-          
+          echo "✅ SonarQube scan completed"
           echo "📋 Generated reports:"
           ls -lh build/reports/ || echo "No reports found"
-        continue-on-error: true
       - name: Check SonarQube Quality Gate
         uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
         env:
@@ -167,7 +171,6 @@ jobs:
         with:
           scanMetadataReportFile: build/sonar/report-task.txt
           timeout: 300
-        continue-on-error: true
       # ========================================
       # DOCKER BUILD & SCAN
       # ========================================
@@ -177,8 +180,9 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'table'
-          exit-code: '0'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
@@ -190,93 +194,17 @@ jobs:
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
       # ========================================
-      # UPLOAD ARTIFACTS TO GITHUB PAGES
+      # UPLOAD ARTIFACTS
       # ========================================
-      - name: Prepare Reports for GitHub Pages
-        if: always()
-        run: |
-          mkdir -p public/reports
-          
-          # Copy Dependency-Check HTML report
-          if [ -f "build/reports/dependency-check-report.html" ]; then
-            cp build/reports/dependency-check-report.html public/reports/
-            echo "✅ Copied Dependency-Check HTML report"
-          fi
-          
-          # Copy CodeQL SARIF
-          if [ -f "codeql-results.sarif" ]; then
-            cp codeql-results.sarif public/reports/
-            echo "✅ Copied CodeQL SARIF"
-          fi
-          
-          # Copy Sonar issues
-          if [ -f "sonar-issues.json" ]; then
-            cp sonar-issues.json public/reports/
-            echo "✅ Copied Sonar issues"
-          fi
-          
-          # Create index.html
-          cat > public/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Security Reports</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                  h1 { color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 10px; }
-                  .report-list { list-style: none; padding: 0; }
-                  .report-item { margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #4CAF50; border-radius: 4px; }
-                  .report-item a { text-decoration: none; color: #2196F3; font-weight: bold; font-size: 16px; }
-                  .report-item a:hover { color: #0d47a1; }
-                  .timestamp { color: #666; font-size: 14px; margin-top: 20px; text-align: center; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🔒 Security Scan Reports</h1>
-                  <ul class="report-list">
-                      <li class="report-item">
-                          <a href="reports/dependency-check-report.html">📦 Dependency-Check Report</a>
-                          <p>Vulnerability analysis of project dependencies</p>
-                      </li>
-                      <li class="report-item">
-                          <a href="reports/codeql-results.sarif">🔍 CodeQL SARIF Results</a>
-                          <p>Static code analysis findings</p>
-                      </li>
-                      <li class="report-item">
-                          <a href="reports/sonar-issues.json">📊 SonarQube Issues (JSON)</a>
-                          <p>Code quality and security issues</p>
-                      </li>
-                  </ul>
-                  <div class="timestamp">
-                      Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-                  </div>
-              </div>
-          </body>
-          </html>
-          EOF
-          
-          echo "✅ Created index.html"
-          ls -la public/reports/
-      - name: Deploy to GitHub Pages
-        if: always() && github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          publish_branch: gh-pages
-          force_orphan: true
-      # ========================================
-      # UPLOAD ARTIFACTS (Backup)
-      # ========================================
-      - name: Upload Security Reports as Artifacts
+      - name: Upload Security Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-reports
+          name: security-reports-${{ github.run_number }}
           path: |
             build/reports/dependency-check-report.*
             sonar-issues.json
             codeql-results.sarif
+            trivy-results.sarif
             codeql-results/java.sarif
+          retention-days: 30
