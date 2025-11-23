@@ -1,4 +1,4 @@
-name: CI Workflow (Gradle)
+name: CI Workflow
 on:
   push:
     branches:
