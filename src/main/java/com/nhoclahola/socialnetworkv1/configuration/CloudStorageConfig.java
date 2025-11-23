@@ -24,6 +24,9 @@ public class CloudStorageConfig
     @Bean
     public S3Client generateS3Client()
     {
+        if (accessKey == null || accessKey.isBlank()) {
+            return null; // S3 disabled
+        }
         AwsCredentials credentials = AwsBasicCredentials.create(accessKey, secretAccessKey);
         return S3Client.builder()
                 .region(Region.of(region))

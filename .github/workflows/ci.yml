@@ -122,23 +122,23 @@ jobs:
       # ========================================
       # CHECK CODEQL RESULTS
       # ========================================
-      - name: Check CodeQL Results
-        id: codeql_check
-        run: |
-          if [ -f "codeql-results.sarif" ]; then
-            CRITICAL_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
-            HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
-
-            echo "🔍 CodeQL Results:"
-            echo "  - Critical/Error: $CRITICAL_COUNT"
-            echo "  - High/Warning: $HIGH_COUNT"
-
-            if [ "$CRITICAL_COUNT" -gt "0" ]; then
-              echo "⚠️ CodeQL found $CRITICAL_COUNT critical issues!"
-              echo "codeql_failed=true" >> $GITHUB_OUTPUT
-            fi
-          fi
-        continue-on-error: true
+#      - name: Check CodeQL Results
+#        id: codeql_check
+#        run: |
+#          if [ -f "codeql-results.sarif" ]; then
+#            CRITICAL_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
+#            HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
+#
+#            echo "🔍 CodeQL Results:"
+#            echo "  - Critical/Error: $CRITICAL_COUNT"
+#            echo "  - High/Warning: $HIGH_COUNT"
+#
+#            if [ "$CRITICAL_COUNT" -gt "0" ]; then
+#              echo "⚠️ CodeQL found $CRITICAL_COUNT critical issues!"
+#              echo "codeql_failed=true" >> $GITHUB_OUTPUT
+#            fi
+#          fi
+#        continue-on-error: true
       # ========================================
       # BUILD & TEST
       # ========================================

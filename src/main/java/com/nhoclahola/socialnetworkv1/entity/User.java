@@ -14,6 +14,7 @@ import java.util.UUID;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+@Table(name = "app_user")  // Đổi tên từ "user" sang "app_user"
 public class User
 {
     @Id
