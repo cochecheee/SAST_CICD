@@ -393,6 +393,7 @@ jobs:
         with:
           name: all-security-reports-${{ github.run_number }}
           path: |
+            codeql-json-reports/
             codeql-results.sarif
             codeql-results/
             build/reports/dependency-check-report.*
