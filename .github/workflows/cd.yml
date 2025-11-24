@@ -15,13 +15,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      # Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
+      # Pull image was built on CI
       - name: Pull Docker Image from CI
         run: |
           echo "Pulling Docker image from Docker Hub..."
@@ -29,12 +29,16 @@ jobs:
           echo "Image pulled successfully"
           docker images | grep aloute-spring
 
+
+      # Verify Docker image
       - name: Verify Docker Image
         run: |
           echo "Verifying Docker image..."
           docker inspect ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
           echo "Image verified"
 
+
+      # Deploy to Render via API
       - name: Deploy to Render
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -111,6 +115,8 @@ jobs:
           echo "Last known status: $STATUS"
           exit 1
 
+
+      # Summary
       - name: Deployment Summary
         if: always()
         run: |
