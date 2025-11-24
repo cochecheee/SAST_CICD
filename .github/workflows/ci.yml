@@ -38,7 +38,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-         languages: java
+          languages: java
 
       - name: Build for CodeQL
         run: ./gradlew build -x test --no-daemon
@@ -87,114 +87,6 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build --no-daemon -x test
         continue-on-error: true
-#      # ========================================
-#      # SONARQUBE SCAN (with Dependency-Check)
-#      # ========================================
-#      - name: Cache SonarQube packages
-#        uses: actions/cache@v4
-#        with:
-#          path: ~/.sonar/cache
-#          key: ${{ runner.os }}-sonar
-#          restore-keys: ${{ runner.os }}-sonar
-#
-#      - name: Verify SonarQube Connection
-#        id: sonar_verify
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-#        run: |
-#          echo "Verifying SonarQube configuration..."
-#
-#          if [ -z "$SONAR_HOST_URL" ]; then
-#            echo "WARNING: SONAR_HOST_URL is not set"
-#            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-#            exit 0
-#          fi
-#
-#          if [ -z "$SONAR_TOKEN" ]; then
-#            echo "WARNING: SONAR_TOKEN is not set"
-#            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-#            exit 0
-#          fi
-#
-#          SONAR_URL="${SONAR_HOST_URL%/}"
-#          echo "SonarQube URL: $SONAR_URL"
-#
-#          # Test connection
-#          echo "🔗 Testing connection to SonarQube..."
-#          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/system/status" || echo "000")
-#
-#          if [ "$HTTP_CODE" = "200" ]; then
-#            echo "Successfully connected to SonarQube"
-#          else
-#            echo "Cannot connect to SonarQube (HTTP $HTTP_CODE)"
-#            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-#          fi
-#        continue-on-error: true
-#
-#      - name: SonarQube Scan with Dependency-Check
-#        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-#          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-#        run: |
-#          echo "Starting SonarQube scan with Dependency-Check..."
-#
-#          SONAR_URL="${SONAR_HOST_URL%/}"
-#
-#          GRADLE_OPTS="-Dsonar.dependencyCheck.htmlReportPath=build/reports/dependency-check-report.html"
-#
-#          if [ -n "$NVD_API_KEY" ]; then
-#            echo "Using NVD API Key"
-#            GRADLE_OPTS="$GRADLE_OPTS -Dsonar.dependencyCheck.nvd.apiKey=$NVD_API_KEY"
-#          else
-#            echo "⚠️ No NVD API Key provided"
-#          fi
-#
-#          ./gradlew sonar \
-#            --info \
-#            --no-daemon \
-#            -Dsonar.projectKey=sast-social \
-#            -Dsonar.projectName=sast-social \
-#            -Dsonar.host.url="${SONAR_URL}" \
-#            -Dsonar.token="${SONAR_TOKEN}" \
-#            -Dsonar.sources=src/main/java \
-#            -Dsonar.tests=src/test/java \
-#            -Dsonar.java.binaries=build/classes/java/main \
-#            -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**' \
-#            -Dsonar.externalIssuesReportPaths=sonar-issues.json \
-#            $GRADLE_OPTS
-#
-#          echo "SonarQube scan completed"
-#          echo "Generated reports:"
-#          ls -lh build/reports/ || echo "No reports found"
-#        continue-on-error: true
-#
-#      - name: Upload SonarQube & Dependency-Check Results
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: sonarqube-dependency-check-results-${{ github.run_number }}
-#          path: |
-#            build/reports/dependency-check-report.*
-#            sonar-issues.json
-#            build/sonar/report-task.txt
-#            .scannerwork/
-#          retention-days: 30
-#
-#      - name: Check SonarQube Quality Gate
-#        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-#        id: quality_gate
-#        uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-#        with:
-#          scanMetadataReportFile: build/sonar/report-task.txt
-#          timeout: 300
-#        continue-on-error: true
-
       # ========================================
       # SONARQUBE SCAN (with Dependency-Check)
       # ========================================
@@ -241,9 +133,9 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/system/status" || echo "000")
 
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Successfully connected to SonarQube"
+            echo "Successfully connected to SonarQube"
           else
-            echo "❌ Cannot connect to SonarQube (HTTP $HTTP_CODE)"
+            echo "Cannot connect to SonarQube (HTTP $HTTP_CODE)"
             echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
           fi
         continue-on-error: true
@@ -253,9 +145,9 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           if [ -z "$NVD_API_KEY" ]; then
-            echo "❌ NVD_API_KEY not found in secrets!"
+            echo "NVD_API_KEY not found in secrets!"
           else
-            echo "✅ NVD_API_KEY found (${#NVD_API_KEY} chars)"
+            echo "NVD_API_KEY found (${#NVD_API_KEY} chars)"
           fi
 
       - name: Run OWASP Dependency-Check
@@ -269,14 +161,36 @@ jobs:
 
           mkdir -p build/reports
 
-          # Method 1: Via system property
+          # Run with explicit format options to ensure all formats are generated
           ./gradlew dependencyCheckAnalyze \
             --no-daemon \
             --info \
-            -Dnvd.api.key="${NVD_API_KEY}"
+            -Dnvd.api.key="${NVD_API_KEY}" \
+            -Dformats=HTML,JSON,XML
 
-          echo "✅ Completed"
-          ls -lh build/reports/
+          echo ""
+          echo "Dependency-Check completed"
+          echo "Generated reports:"
+          ls -lh build/reports/ | grep dependency-check || echo "No reports found"
+        continue-on-error: true
+
+      - name: Verify Dependency-Check Reports
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Verifying Dependency-Check Reports"
+          echo "=========================================="
+          
+          # Check for all report formats
+          for format in html json xml; do
+            REPORT_FILE="build/reports/dependency-check-report.${format}"
+            if [ -f "$REPORT_FILE" ]; then
+              SIZE=$(stat -f%z "$REPORT_FILE" 2>/dev/null || stat -c%s "$REPORT_FILE" 2>/dev/null)
+              echo "Found ${format^^} report: $REPORT_FILE (${SIZE} bytes)"
+            else
+              echo "Missing ${format^^} report: $REPORT_FILE"
+            fi
+          done
         continue-on-error: true
 
       - name: SonarQube Scan with Dependency-Check Results
@@ -291,25 +205,7 @@ jobs:
 
           SONAR_URL="${SONAR_HOST_URL%/}"
 
-          # Check for Dependency-Check reports
-          DC_JSON_REPORT=""
-          DC_HTML_REPORT=""
-
-          if [ -f "build/reports/dependency-check-report.json" ]; then
-            echo "✅ Found Dependency-Check JSON report"
-            DC_JSON_REPORT="build/reports/dependency-check-report.json"
-          else
-            echo "⚠️  Dependency-Check JSON report not found"
-          fi
-
-          if [ -f "build/reports/dependency-check-report.html" ]; then
-            echo "✅ Found Dependency-Check HTML report"
-            DC_HTML_REPORT="build/reports/dependency-check-report.html"
-          else
-            echo "⚠️  Dependency-Check HTML report not found"
-          fi
-
-          # Build SonarQube command
+          # Build base SonarQube command
           SONAR_CMD="./gradlew sonar \
             --info \
             --no-daemon \
@@ -322,28 +218,49 @@ jobs:
             -Dsonar.java.binaries=build/classes/java/main \
             -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**'"
 
-          # Add Dependency-Check report paths if they exist
-          if [ -n "$DC_JSON_REPORT" ]; then
-            SONAR_CMD="$SONAR_CMD -Dsonar.dependencyCheck.jsonReportPath=$DC_JSON_REPORT"
+          # Add Dependency-Check report paths (ALL formats for compatibility)
+          echo ""
+          echo "Configuring Dependency-Check reports..."
+          
+          if [ -f "build/reports/dependency-check-report.html" ]; then
+            echo "Adding HTML report"
+            SONAR_CMD="$SONAR_CMD -Dsonar.dependencyCheck.htmlReportPath=build/reports/dependency-check-report.html"
           fi
 
-          if [ -n "$DC_HTML_REPORT" ]; then
-            SONAR_CMD="$SONAR_CMD -Dsonar.dependencyCheck.htmlReportPath=$DC_HTML_REPORT"
+          if [ -f "build/reports/dependency-check-report.json" ]; then
+            echo "Adding JSON report"
+            SONAR_CMD="$SONAR_CMD -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json"
           fi
 
-          # Add external issues if exists
+          if [ -f "build/reports/dependency-check-report.xml" ]; then
+            echo "Adding XML report"
+            SONAR_CMD="$SONAR_CMD -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml"
+          fi
+
+          # Add CodeQL external issues if exists
           if [ -f "sonar-issues.json" ]; then
+            echo "Adding CodeQL external issues"
             SONAR_CMD="$SONAR_CMD -Dsonar.externalIssuesReportPaths=sonar-issues.json"
           fi
 
           echo ""
           echo "Executing SonarQube scan..."
+          echo "Command preview:"
+          echo "$SONAR_CMD" | sed "s/${SONAR_TOKEN}/<REDACTED>/g"
+          echo ""
+          
           eval $SONAR_CMD
 
           echo ""
           echo "=========================================="
           echo "SonarQube Scan Completed"
           echo "=========================================="
+          
+          # Show report task info
+          if [ -f "build/sonar/report-task.txt" ]; then
+            echo "Report task info:"
+            cat build/sonar/report-task.txt
+          fi
         continue-on-error: true
 
       - name: Upload Dependency-Check Reports
@@ -389,12 +306,17 @@ jobs:
           echo "Quality Gate Status"
           echo "=========================================="
           if [ "${{ steps.quality_gate.outputs.quality-gate-status }}" = "PASSED" ]; then
-            echo "✅ Quality Gate: PASSED"
+            echo "Quality Gate: PASSED"
           else
-            echo "❌ Quality Gate: FAILED"
-            echo "⚠️  Please check SonarQube dashboard for details"
+            echo "Quality Gate: FAILED"
+            echo "Please check SonarQube dashboard for details"
           fi
           echo "Dashboard: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=sast-social"
+          echo ""
+          echo "NOTE: If Dependency-Check results are not showing:"
+          echo "   1. Verify Dependency-Check plugin is installed in SonarQube"
+          echo "   2. Check Administration > Marketplace > search 'Dependency-Check'"
+          echo "   3. Install plugin and restart SonarQube server"
       # ========================================
       # DOCKER BUILD & SCAN
       # ========================================

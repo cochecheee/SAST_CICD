@@ -28,8 +28,6 @@ jobs:
           docker pull ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
           echo "Image pulled successfully"
           docker images | grep aloute-spring
-
-
       # Verify Docker image
       - name: Verify Docker Image
         run: |
