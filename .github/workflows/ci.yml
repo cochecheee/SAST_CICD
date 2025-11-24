@@ -45,22 +45,23 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
-#        env:
-#          CODEQL_ACTION_EXTRA_OPTIONS: '{"database": {"finalize": ["--no-upload"]}}'
         with:
           category: "/language:java"
           upload: false
           output: codeql-results
 
-      - name: Copy SARIF file
+      - name: Extract JSON from SARIF
         run: |
-          if [ -f "codeql-results/java.sarif" ]; then
-            cp codeql-results/java.sarif codeql-results.sarif
-            echo "Copied SARIF file"
-          else
-            echo "SARIF file not found, searching..."
-            find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
+          SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
+          if [ -z "$SARIF_FILE" ]; then
+            echo "No SARIF file found!"
+            exit 1
           fi
+          echo "Using SARIF: $SARIF_FILE"
+
+          # convert SARIF → JSON (only results section)
+          jq '.runs[].results' "$SARIF_FILE" > codeql-results.json
+          echo "Created codeql-results.json"
 
       - name: Convert CodeQL SARIF to Sonar format
         run: |
@@ -73,13 +74,12 @@ jobs:
             echo '{"issues":[]}' > sonar-issues.json
           fi
 
-      - name: Upload CodeQL Results
+      - name: Upload CodeQL JSON Output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: codeql-scan-results-${{ github.run_number }}
-          path: |
-            codeql-results.sarif
+          name: codeql-json-results-${{ github.run_number }}
+          path: codeql-results.json
           retention-days: 30
       # ========================================
       # BUILD & TEST
