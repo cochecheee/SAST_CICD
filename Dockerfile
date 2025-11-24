@@ -24,7 +24,6 @@ WORKDIR /app
 COPY --from=build /app/build/libs/social-network-v1-0.0.1-SNAPSHOT.jar app.jar
 
 # Define the command to run the application with JVM options for Log4Shell exploitation
-# WARNING: FOR LAB/EDUCATIONAL PURPOSES ONLY!
 ENTRYPOINT ["java", \
     "-Dcom.sun.jndi.ldap.object.trustURLCodebase=true", \
     "-Dcom.sun.jndi.rmi.object.trustURLCodebase=true", \

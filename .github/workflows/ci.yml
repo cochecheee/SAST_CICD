@@ -29,61 +29,20 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       # ========================================
       # CODEQL ANALYSIS
       # ========================================
-#      - name: Initialize CodeQL
-#        uses: github/codeql-action/init@v4
-#        with:
-#          languages: java
-#      - name: Build for CodeQL
-#        run: ./gradlew build -x test --no-daemon
-#        continue-on-error: true
-#      - name: Perform CodeQL Analysis
-#        uses: github/codeql-action/analyze@v4
-#        with:
-#          category: "/language:java"
-#          upload: false
-#          output: codeql-results
-#        continue-on-error: true
-#      - name: Copy SARIF file
-#        run: |
-#          if [ -f "codeql-results/java.sarif" ]; then
-#            cp codeql-results/java.sarif codeql-results.sarif
-#            echo "✅ Copied SARIF file"
-#          else
-#            echo "⚠️ SARIF file not found, searching..."
-#            find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
-#          fi
-#        continue-on-error: true
-#      - name: Upload CodeQL Results
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: codeql-scan-results-${{ github.run_number }}
-#          path: |
-#            codeql-results.sarif
-#            codeql-results/
-#          retention-days: 30
-#      - name: Convert CodeQL SARIF to Sonar format
-#        run: |
-#          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
-#            python scripts/convert_codeql_to_sonar.py \
-#              --input codeql-results.sarif \
-#              --output sonar-issues.json
-#          else
-#            echo "⚠️ Converter script not found, creating empty report"
-#            echo '{"issues":[]}' > sonar-issues.json
-#          fi
-#        continue-on-error: true
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
          languages: java
+
       - name: Build for CodeQL
         run: ./gradlew build -x test --no-daemon
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
 #        env:
@@ -92,15 +51,17 @@ jobs:
           category: "/language:java"
           upload: false
           output: codeql-results
+
       - name: Copy SARIF file
         run: |
           if [ -f "codeql-results/java.sarif" ]; then
             cp codeql-results/java.sarif codeql-results.sarif
-            echo "✅ Copied SARIF file"
+            echo "Copied SARIF file"
           else
-            echo "⚠️ SARIF file not found, searching..."
+            echo "SARIF file not found, searching..."
             find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
           fi
+
       - name: Convert CodeQL SARIF to Sonar format
         run: |
           if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
@@ -108,9 +69,10 @@ jobs:
               --input codeql-results.sarif \
               --output sonar-issues.json
           else
-            echo "⚠️ Converter script not found, creating empty report"
+            echo "Converter script not found, creating empty report"
             echo '{"issues":[]}' > sonar-issues.json
           fi
+
       - name: Upload CodeQL Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -119,26 +81,6 @@ jobs:
           path: |
             codeql-results.sarif
           retention-days: 30
-      # ========================================
-      # CHECK CODEQL RESULTS
-      # ========================================
-#      - name: Check CodeQL Results
-#        id: codeql_check
-#        run: |
-#          if [ -f "codeql-results.sarif" ]; then
-#            CRITICAL_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
-#            HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
-#
-#            echo "🔍 CodeQL Results:"
-#            echo "  - Critical/Error: $CRITICAL_COUNT"
-#            echo "  - High/Warning: $HIGH_COUNT"
-#
-#            if [ "$CRITICAL_COUNT" -gt "0" ]; then
-#              echo "⚠️ CodeQL found $CRITICAL_COUNT critical issues!"
-#              echo "codeql_failed=true" >> $GITHUB_OUTPUT
-#            fi
-#          fi
-#        continue-on-error: true
       # ========================================
       # BUILD & TEST
       # ========================================
@@ -154,40 +96,42 @@ jobs:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
+
       - name: Verify SonarQube Connection
         id: sonar_verify
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "🔍 Verifying SonarQube configuration..."
+          echo "Verifying SonarQube configuration..."
 
           if [ -z "$SONAR_HOST_URL" ]; then
-            echo "⚠️ WARNING: SONAR_HOST_URL is not set"
+            echo "WARNING: SONAR_HOST_URL is not set"
             echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           if [ -z "$SONAR_TOKEN" ]; then
-            echo "⚠️ WARNING: SONAR_TOKEN is not set"
+            echo "WARNING: SONAR_TOKEN is not set"
             echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           SONAR_URL="${SONAR_HOST_URL%/}"
-          echo "✅ SonarQube URL: $SONAR_URL"
+          echo "SonarQube URL: $SONAR_URL"
 
           # Test connection
           echo "🔗 Testing connection to SonarQube..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/system/status" || echo "000")
 
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Successfully connected to SonarQube"
+            echo "Successfully connected to SonarQube"
           else
-            echo "⚠️ Cannot connect to SonarQube (HTTP $HTTP_CODE)"
+            echo "Cannot connect to SonarQube (HTTP $HTTP_CODE)"
             echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
           fi
         continue-on-error: true
+
       - name: SonarQube Scan with Dependency-Check
         if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
         env:
@@ -195,14 +139,14 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          echo "🚀 Starting SonarQube scan with Dependency-Check..."
+          echo "Starting SonarQube scan with Dependency-Check..."
 
           SONAR_URL="${SONAR_HOST_URL%/}"
 
           GRADLE_OPTS="-Dsonar.dependencyCheck.htmlReportPath=build/reports/dependency-check-report.html"
 
           if [ -n "$NVD_API_KEY" ]; then
-            echo "✅ Using NVD API Key"
+            echo "Using NVD API Key"
             GRADLE_OPTS="$GRADLE_OPTS -Dsonar.dependencyCheck.nvd.apiKey=$NVD_API_KEY"
           else
             echo "⚠️ No NVD API Key provided"
@@ -222,10 +166,11 @@ jobs:
             -Dsonar.externalIssuesReportPaths=sonar-issues.json \
             $GRADLE_OPTS
 
-          echo "✅ SonarQube scan completed"
-          echo "📋 Generated reports:"
+          echo "SonarQube scan completed"
+          echo "Generated reports:"
           ls -lh build/reports/ || echo "No reports found"
         continue-on-error: true
+
       - name: Upload SonarQube & Dependency-Check Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -237,6 +182,7 @@ jobs:
             build/sonar/report-task.txt
             .scannerwork/
           retention-days: 30
+
       - name: Check SonarQube Quality Gate
         if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
         id: quality_gate
@@ -254,6 +200,7 @@ jobs:
       - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
         continue-on-error: true
+
       - name: Scan Docker Image with Trivy
         id: trivy_scan
         uses: aquasecurity/trivy-action@master
@@ -266,6 +213,7 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
         continue-on-error: true
+
       - name: Generate Trivy JSON Report
         if: always()
         uses: aquasecurity/trivy-action@master
@@ -278,6 +226,7 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
         continue-on-error: true
+
       - name: Generate Trivy Table Report
         if: always()
         uses: aquasecurity/trivy-action@master
@@ -290,6 +239,7 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
         continue-on-error: true
+
       - name: Upload Trivy Scan Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -300,12 +250,14 @@ jobs:
             trivy-results.json
             trivy-results.txt
           retention-days: 30
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
         continue-on-error: true
+
       - name: Push Docker Image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
         continue-on-error: true
@@ -334,642 +286,29 @@ jobs:
         if: always()
         run: |
           echo "================================================"
-          echo "🔒 SECURITY SCAN SUMMARY"
+          echo "SECURITY SCAN SUMMARY"
           echo "================================================"
 
           if [ "${{ steps.codeql_check.outputs.codeql_failed }}" == "true" ]; then
-            echo "⚠️ CodeQL: FAILED (Critical issues found)"
+            echo "CodeQL: FAILED (Critical issues found)"
           else
-            echo "✅ CodeQL: PASSED"
+            echo "CodeQL: PASSED"
           fi
 
           if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
-            echo "⚠️ SonarQube: SKIPPED (Unavailable)"
+            echo "SonarQube: SKIPPED (Unavailable)"
           elif [ "${{ steps.quality_gate.outcome }}" == "failure" ]; then
-            echo "⚠️ SonarQube Quality Gate: FAILED"
+            echo "SonarQube Quality Gate: FAILED"
           else
-            echo "✅ SonarQube: PASSED"
+            echo "SonarQube: PASSED"
           fi
 
           if [ "${{ steps.trivy_scan.outcome }}" == "failure" ]; then
-            echo "⚠️ Trivy Scan: FAILED (Vulnerabilities found)"
+            echo "Trivy Scan: FAILED (Vulnerabilities found)"
           else
-            echo "✅ Trivy Scan: PASSED"
+            echo "Trivy Scan: PASSED"
           fi
 
           echo "================================================"
-          echo "📦 All artifacts have been uploaded"
-          echo "================================================"
-
-#name: CI Workflow
-#on:
-#  push:
-#    branches:
-#      - main
-#  pull_request:
-#    branches:
-#      - main
-#
-#jobs:
-#  ci:
-#    name: Security & Build Pipeline
-#    runs-on: ubuntu-latest
-#    permissions:
-#      actions: read
-#      contents: read
-#      security-events: write
-#    steps:
-#      - name: Checkout code
-#        uses: actions/checkout@v4
-#        with:
-#          fetch-depth: 0
-#      # ========================================
-#      # SETUP
-#      # ========================================
-#      - name: Set up JDK 17
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '17'
-#          distribution: 'temurin'
-#          cache: gradle
-#      - name: Grant execute permission for gradlew
-#        run: chmod +x gradlew
-#      # ========================================
-#      # CODEQL ANALYSIS
-#      # ========================================
-#      - name: Initialize CodeQL
-#        uses: github/codeql-action/init@v4
-#        with:
-#          languages: java
-#      - name: Build for CodeQL
-#        run: ./gradlew build -x test --no-daemon
-#        continue-on-error: true
-#      - name: Perform CodeQL Analysis
-#        uses: github/codeql-action/analyze@v4
-#        with:
-#          category: "/language:java"
-#          upload: false
-#          output: codeql-results
-#        continue-on-error: true
-#      - name: Copy SARIF file
-#        run: |
-#          if [ -f "codeql-results/java.sarif" ]; then
-#            cp codeql-results/java.sarif codeql-results.sarif
-#            echo "✅ Copied SARIF file"
-#          else
-#            echo "⚠️ SARIF file not found, searching..."
-#            find . -name "*.sarif" -type f -exec cp {} codeql-results.sarif \;
-#          fi
-#        continue-on-error: true
-#      - name: Generate CodeQL Report
-#        if: always()
-#        run: |
-#          mkdir -p reports
-#
-#          cat > reports/codeql-report.md << 'EOF'
-#          # 🔍 CodeQL Security Analysis Report
-#
-#          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-#          **Workflow Run:** #${{ github.run_number }}
-#          **Branch:** ${{ github.ref_name }}
-#          **Commit:** ${{ github.sha }}
-#
-#          ---
-#
-#          EOF
-#
-#          if [ -f "codeql-results.sarif" ]; then
-#            TOTAL=$(jq '[.runs[].results[]] | length' codeql-results.sarif || echo "0")
-#            CRITICAL=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
-#            HIGH=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
-#            MEDIUM=$(jq '[.runs[].results[] | select(.level == "note")] | length' codeql-results.sarif || echo "0")
-#
-#            cat >> reports/codeql-report.md << EOF
-#          ## 📊 Summary
-#
-#          | Severity | Count |
-#          |----------|-------|
-#          | 🔴 Critical/Error | $CRITICAL |
-#          | 🟠 High/Warning | $HIGH |
-#          | 🟡 Medium/Note | $MEDIUM |
-#          | **Total Issues** | **$TOTAL** |
-#
-#          ---
-#
-#          ## 🔎 Detailed Findings
-#
-#          EOF
-#
-#            if [ "$TOTAL" -eq "0" ]; then
-#              echo "✅ **No security issues found!**" >> reports/codeql-report.md
-#            else
-#              jq -r '.runs[].results[] | "### " + (.level | ascii_upcase) + ": " + .ruleId + "\n\n**Message:** " + .message.text + "\n\n**Location:** " + (.locations[0].physicalLocation.artifactLocation.uri // "N/A") + " (Line " + (.locations[0].physicalLocation.region.startLine | tostring) + ")\n\n**Description:** " + (.rule.shortDescription.text // "No description available") + "\n\n---\n"' codeql-results.sarif >> reports/codeql-report.md 2>/dev/null || echo "⚠️ Unable to parse detailed findings" >> reports/codeql-report.md
-#            fi
-#          else
-#            echo "⚠️ **CodeQL SARIF file not found**" >> reports/codeql-report.md
-#          fi
-#
-#          echo "✅ CodeQL report generated"
-#      - name: Upload CodeQL Results
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: codeql-scan-results-${{ github.run_number }}
-#          path: |
-#            codeql-results.sarif
-#            codeql-results/
-#            reports/codeql-report.md
-#          retention-days: 30
-#      - name: Convert CodeQL SARIF to Sonar format
-#        run: |
-#          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
-#            python scripts/convert_codeql_to_sonar.py \
-#              --input codeql-results.sarif \
-#              --output sonar-issues.json
-#          else
-#            echo "⚠️ Converter script not found, creating empty report"
-#            echo '{"issues":[]}' > sonar-issues.json
-#          fi
-#        continue-on-error: true
-#      # ========================================
-#      # CHECK CODEQL RESULTS
-#      # ========================================
-#      - name: Check CodeQL Results
-#        id: codeql_check
-#        run: |
-#          if [ -f "codeql-results.sarif" ]; then
-#            CRITICAL_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
-#            HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
-#
-#            echo "🔍 CodeQL Results:"
-#            echo "  - Critical/Error: $CRITICAL_COUNT"
-#            echo "  - High/Warning: $HIGH_COUNT"
-#
-#            if [ "$CRITICAL_COUNT" -gt "0" ]; then
-#              echo "⚠️ CodeQL found $CRITICAL_COUNT critical issues!"
-#              echo "codeql_failed=true" >> $GITHUB_OUTPUT
-#            fi
-#          fi
-#        continue-on-error: true
-#      # ========================================
-#      # BUILD & TEST
-#      # ========================================
-#      - name: Build with Gradle
-#        run: ./gradlew clean build --no-daemon -x test
-#        continue-on-error: true
-#      # ========================================
-#      # SONARQUBE SCAN (with Dependency-Check)
-#      # ========================================
-#      - name: Cache SonarQube packages
-#        uses: actions/cache@v4
-#        with:
-#          path: ~/.sonar/cache
-#          key: ${{ runner.os }}-sonar
-#          restore-keys: ${{ runner.os }}-sonar
-#      - name: Verify SonarQube Connection
-#        id: sonar_verify
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-#        run: |
-#          echo "🔍 Verifying SonarQube configuration..."
-#
-#          if [ -z "$SONAR_HOST_URL" ]; then
-#            echo "⚠️ WARNING: SONAR_HOST_URL is not set"
-#            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-#            exit 0
-#          fi
-#
-#          if [ -z "$SONAR_TOKEN" ]; then
-#            echo "⚠️ WARNING: SONAR_TOKEN is not set"
-#            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-#            exit 0
-#          fi
-#
-#          SONAR_URL="${SONAR_HOST_URL%/}"
-#          echo "✅ SonarQube URL: $SONAR_URL"
-#
-#          # Test connection
-#          echo "🔗 Testing connection to SonarQube..."
-#          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/system/status" || echo "000")
-#
-#          if [ "$HTTP_CODE" = "200" ]; then
-#            echo "✅ Successfully connected to SonarQube"
-#          else
-#            echo "⚠️ Cannot connect to SonarQube (HTTP $HTTP_CODE)"
-#            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-#          fi
-#        continue-on-error: true
-#      - name: SonarQube Scan with Dependency-Check
-#        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-#          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-#        run: |
-#          echo "🚀 Starting SonarQube scan with Dependency-Check..."
-#
-#          SONAR_URL="${SONAR_HOST_URL%/}"
-#
-#          GRADLE_OPTS="-Dsonar.dependencyCheck.htmlReportPath=build/reports/dependency-check-report.html"
-#
-#          if [ -n "$NVD_API_KEY" ]; then
-#            echo "✅ Using NVD API Key"
-#            GRADLE_OPTS="$GRADLE_OPTS -Dsonar.dependencyCheck.nvd.apiKey=$NVD_API_KEY"
-#          else
-#            echo "⚠️ No NVD API Key provided"
-#          fi
-#
-#          ./gradlew sonar \
-#            --info \
-#            --no-daemon \
-#            -Dsonar.projectKey=sast-social \
-#            -Dsonar.projectName=sast-social \
-#            -Dsonar.host.url="${SONAR_URL}" \
-#            -Dsonar.token="${SONAR_TOKEN}" \
-#            -Dsonar.sources=src/main/java \
-#            -Dsonar.tests=src/test/java \
-#            -Dsonar.java.binaries=build/classes/java/main \
-#            -Dsonar.exclusions='**/test/**,**/build/**,**/node_modules/**' \
-#            -Dsonar.externalIssuesReportPaths=sonar-issues.json \
-#            $GRADLE_OPTS
-#
-#          echo "✅ SonarQube scan completed"
-#          echo "📋 Generated reports:"
-#          ls -lh build/reports/ || echo "No reports found"
-#        continue-on-error: true
-#      - name: Generate SonarQube & Dependency-Check Report
-#        if: always()
-#        run: |
-#          mkdir -p reports
-#
-#          cat > reports/sonarqube-report.md << 'EOF'
-#          # 📊 SonarQube Quality & Security Report
-#
-#          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-#          **Workflow Run:** #${{ github.run_number }}
-#          **Project:** sast-social
-#
-#          ---
-#
-#          EOF
-#
-#          if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
-#            cat >> reports/sonarqube-report.md << EOF
-#          ## ⚠️ SonarQube Unavailable
-#
-#          SonarQube scan was skipped because the service is unavailable or not configured.
-#
-#          EOF
-#          else
-#            cat >> reports/sonarqube-report.md << EOF
-#          ## ✅ SonarQube Scan Completed
-#
-#          **Dashboard:** ${{ secrets.SONAR_HOST_URL }}/dashboard?id=sast-social
-#
-#          EOF
-#          fi
-#
-#          # Dependency-Check Report
-#          cat >> reports/sonarqube-report.md << 'EOF'
-#          ---
-#
-#          # 📦 Dependency-Check Vulnerability Report
-#
-#          EOF
-#
-#          if [ -f "build/reports/dependency-check-report.xml" ]; then
-#            TOTAL_DEPS=$(xmllint --xpath "count(//dependency)" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            VULNERABLE_DEPS=$(xmllint --xpath "count(//dependency[vulnerabilities/vulnerability])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            CRITICAL=$(xmllint --xpath "count(//vulnerability[severity='CRITICAL'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            HIGH=$(xmllint --xpath "count(//vulnerability[severity='HIGH'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            MEDIUM=$(xmllint --xpath "count(//vulnerability[severity='MEDIUM'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            LOW=$(xmllint --xpath "count(//vulnerability[severity='LOW'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#
-#            cat >> reports/sonarqube-report.md << EOF
-#          ## 📊 Summary
-#
-#          | Metric | Count |
-#          |--------|-------|
-#          | Total Dependencies | $TOTAL_DEPS |
-#          | Vulnerable Dependencies | $VULNERABLE_DEPS |
-#          | 🔴 Critical | $CRITICAL |
-#          | 🟠 High | $HIGH |
-#          | 🟡 Medium | $MEDIUM |
-#          | 🟢 Low | $LOW |
-#
-#          EOF
-#
-#            if [ "$VULNERABLE_DEPS" -gt "0" ]; then
-#              cat >> reports/sonarqube-report.md << 'EOF'
-#          ## 🔎 Vulnerable Dependencies
-#
-#          EOF
-#
-#              # Extract vulnerable dependencies (simplified)
-#              xmllint --xpath "//dependency[vulnerabilities/vulnerability]" build/reports/dependency-check-report.xml 2>/dev/null | \
-#              sed 's/<dependency>/\n### Dependency\n/g' | \
-#              sed 's/<\/dependency>//g' | \
-#              head -n 50 >> reports/sonarqube-report.md || echo "⚠️ Unable to extract detailed vulnerability information" >> reports/sonarqube-report.md
-#            else
-#              echo "✅ **No vulnerable dependencies found!**" >> reports/sonarqube-report.md
-#            fi
-#          else
-#            echo "⚠️ **Dependency-Check report not found**" >> reports/sonarqube-report.md
-#          fi
-#
-#          echo "✅ SonarQube & Dependency-Check report generated"
-#      - name: Upload SonarQube & Dependency-Check Results
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: sonarqube-dependency-check-results-${{ github.run_number }}
-#          path: |
-#            build/reports/dependency-check-report.*
-#            sonar-issues.json
-#            build/sonar/report-task.txt
-#            .scannerwork/
-#            reports/sonarqube-report.md
-#          retention-days: 30
-#      - name: Check SonarQube Quality Gate
-#        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-#        id: quality_gate
-#        uses: sonarsource/sonarqube-quality-gate-action@v1.2.0
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-#        with:
-#          scanMetadataReportFile: build/sonar/report-task.txt
-#          timeout: 300
-#        continue-on-error: true
-#      # ========================================
-#      # DOCKER BUILD & SCAN
-#      # ========================================
-#      - name: Build Docker Image
-#        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
-#        continue-on-error: true
-#      - name: Scan Docker Image with Trivy
-#        id: trivy_scan
-#        uses: aquasecurity/trivy-action@master
-#        with:
-#          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-#          format: 'sarif'
-#          output: 'trivy-results.sarif'
-#          exit-code: '0'
-#          ignore-unfixed: true
-#          vuln-type: 'os,library'
-#          severity: 'CRITICAL,HIGH'
-#        continue-on-error: true
-#      - name: Generate Trivy JSON Report
-#        if: always()
-#        uses: aquasecurity/trivy-action@master
-#        with:
-#          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-#          format: 'json'
-#          output: 'trivy-results.json'
-#          exit-code: '0'
-#          ignore-unfixed: true
-#          vuln-type: 'os,library'
-#          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-#        continue-on-error: true
-#      - name: Generate Trivy Table Report
-#        if: always()
-#        uses: aquasecurity/trivy-action@master
-#        with:
-#          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-#          format: 'table'
-#          output: 'trivy-results.txt'
-#          exit-code: '0'
-#          ignore-unfixed: true
-#          vuln-type: 'os,library'
-#          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-#        continue-on-error: true
-#      - name: Generate Trivy Markdown Report
-#        if: always()
-#        run: |
-#          mkdir -p reports
-#
-#          cat > reports/trivy-report.md << 'EOF'
-#          # 🐳 Docker Image Security Scan (Trivy)
-#
-#          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-#          **Image:** ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-#          **Workflow Run:** #${{ github.run_number }}
-#
-#          ---
-#
-#          EOF
-#
-#          if [ -f "trivy-results.json" ]; then
-#            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json || echo "0")
-#            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-results.json || echo "0")
-#            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-results.json || echo "0")
-#            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' trivy-results.json || echo "0")
-#            TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
-#
-#            cat >> reports/trivy-report.md << EOF
-#          ## 📊 Summary
-#
-#          | Severity | Count |
-#          |----------|-------|
-#          | 🔴 Critical | $CRITICAL |
-#          | 🟠 High | $HIGH |
-#          | 🟡 Medium | $MEDIUM |
-#          | 🟢 Low | $LOW |
-#          | **Total** | **$TOTAL** |
-#
-#          EOF
-#
-#            if [ "$TOTAL" -eq "0" ]; then
-#              echo "✅ **No vulnerabilities found!**" >> reports/trivy-report.md
-#            else
-#              cat >> reports/trivy-report.md << 'EOF'
-#          ---
-#
-#          ## 🔎 Detailed Findings
-#
-#          EOF
-#
-#              # Add table format from trivy-results.txt if available
-#              if [ -f "trivy-results.txt" ]; then
-#                echo '```' >> reports/trivy-report.md
-#                cat trivy-results.txt >> reports/trivy-report.md
-#                echo '```' >> reports/trivy-report.md
-#              fi
-#            fi
-#          else
-#            echo "⚠️ **Trivy scan results not found**" >> reports/trivy-report.md
-#          fi
-#
-#          echo "✅ Trivy report generated"
-#      - name: Upload Trivy Scan Results
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: trivy-scan-results-${{ github.run_number }}
-#          path: |
-#            trivy-results.sarif
-#            trivy-results.json
-#            trivy-results.txt
-#            reports/trivy-report.md
-#          retention-days: 30
-#      - name: Login to Docker Hub
-#        uses: docker/login-action@v3
-#        with:
-#          username: ${{ secrets.DOCKER_USERNAME }}
-#          password: ${{ secrets.DOCKER_PASSWORD }}
-#        continue-on-error: true
-#      - name: Push Docker Image
-#        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-#        continue-on-error: true
-#      # ========================================
-#      # GENERATE MASTER SUMMARY REPORT
-#      # ========================================
-#      - name: Generate Master Security Report
-#        if: always()
-#        run: |
-#          mkdir -p reports
-#
-#          cat > reports/SECURITY-SUMMARY.md << 'EOF'
-#          # 🔒 Complete Security Scan Report
-#
-#          **Project:** sast-social
-#          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-#          **Workflow Run:** #${{ github.run_number }}
-#          **Branch:** ${{ github.ref_name }}
-#          **Commit:** ${{ github.sha }}
-#
-#          ---
-#
-#          ## 📋 Executive Summary
-#
-#          | Security Tool | Status | Critical | High | Medium | Low |
-#          |--------------|--------|----------|------|--------|-----|
-#          EOF
-#
-#          # CodeQL Summary
-#          if [ -f "codeql-results.sarif" ]; then
-#            CODEQL_CRITICAL=$(jq '[.runs[].results[] | select(.level == "error")] | length' codeql-results.sarif || echo "0")
-#            CODEQL_HIGH=$(jq '[.runs[].results[] | select(.level == "warning")] | length' codeql-results.sarif || echo "0")
-#            CODEQL_MEDIUM=$(jq '[.runs[].results[] | select(.level == "note")] | length' codeql-results.sarif || echo "0")
-#            CODEQL_STATUS="✅ PASSED"
-#            [ "$CODEQL_CRITICAL" -gt "0" ] && CODEQL_STATUS="⚠️ FAILED"
-#            echo "| CodeQL | $CODEQL_STATUS | $CODEQL_CRITICAL | $CODEQL_HIGH | $CODEQL_MEDIUM | 0 |" >> reports/SECURITY-SUMMARY.md
-#          else
-#            echo "| CodeQL | ⚠️ N/A | - | - | - | - |" >> reports/SECURITY-SUMMARY.md
-#          fi
-#
-#          # Dependency-Check Summary
-#          if [ -f "build/reports/dependency-check-report.xml" ]; then
-#            DEP_CRITICAL=$(xmllint --xpath "count(//vulnerability[severity='CRITICAL'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            DEP_HIGH=$(xmllint --xpath "count(//vulnerability[severity='HIGH'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            DEP_MEDIUM=$(xmllint --xpath "count(//vulnerability[severity='MEDIUM'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            DEP_LOW=$(xmllint --xpath "count(//vulnerability[severity='LOW'])" build/reports/dependency-check-report.xml 2>/dev/null || echo "0")
-#            DEP_STATUS="✅ PASSED"
-#            [ "$DEP_CRITICAL" -gt "0" ] && DEP_STATUS="⚠️ FAILED"
-#            echo "| Dependency-Check | $DEP_STATUS | $DEP_CRITICAL | $DEP_HIGH | $DEP_MEDIUM | $DEP_LOW |" >> reports/SECURITY-SUMMARY.md
-#          else
-#            echo "| Dependency-Check | ⚠️ N/A | - | - | - | - |" >> reports/SECURITY-SUMMARY.md
-#          fi
-#
-#          # Trivy Summary
-#          if [ -f "trivy-results.json" ]; then
-#            TRIVY_CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json || echo "0")
-#            TRIVY_HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-results.json || echo "0")
-#            TRIVY_MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-results.json || echo "0")
-#            TRIVY_LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' trivy-results.json || echo "0")
-#            TRIVY_STATUS="✅ PASSED"
-#            [ "$TRIVY_CRITICAL" -gt "0" ] && TRIVY_STATUS="⚠️ FAILED"
-#            echo "| Trivy (Docker) | $TRIVY_STATUS | $TRIVY_CRITICAL | $TRIVY_HIGH | $TRIVY_MEDIUM | $TRIVY_LOW |" >> reports/SECURITY-SUMMARY.md
-#          else
-#            echo "| Trivy (Docker) | ⚠️ N/A | - | - | - | - |" >> reports/SECURITY-SUMMARY.md
-#          fi
-#
-#          # SonarQube Summary
-#          if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
-#            echo "| SonarQube | ⚠️ SKIPPED | - | - | - | - |" >> reports/SECURITY-SUMMARY.md
-#          elif [ "${{ steps.quality_gate.outcome }}" == "failure" ]; then
-#            echo "| SonarQube | ⚠️ FAILED | - | - | - | - |" >> reports/SECURITY-SUMMARY.md
-#          else
-#            echo "| SonarQube | ✅ PASSED | - | - | - | - |" >> reports/SECURITY-SUMMARY.md
-#          fi
-#
-#          cat >> reports/SECURITY-SUMMARY.md << 'EOF'
-#
-#          ---
-#
-#          ## 📁 Detailed Reports
-#
-#          - 📄 [CodeQL Analysis Report](codeql-report.md)
-#          - 📄 [SonarQube & Dependency-Check Report](sonarqube-report.md)
-#          - 📄 [Trivy Docker Scan Report](trivy-report.md)
-#
-#          ---
-#
-#          ## 🔗 Quick Links
-#
-#          - **SonarQube Dashboard:** ${{ secrets.SONAR_HOST_URL }}/dashboard?id=sast-social
-#          - **GitHub Actions:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-#
-#          ---
-#
-#          ## 📦 Artifacts
-#
-#          All security scan results and reports are available as workflow artifacts.
-#
-#          EOF
-#
-#          echo "✅ Master security report generated"
-#      # ========================================
-#      # UPLOAD ALL SECURITY REPORTS (Combined)
-#      # ========================================
-#      - name: Upload All Security Reports (Combined)
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: all-security-reports-${{ github.run_number }}
-#          path: |
-#            reports/
-#            codeql-results.sarif
-#            codeql-results/
-#            build/reports/dependency-check-report.*
-#            sonar-issues.json
-#            build/sonar/report-task.txt
-#            trivy-results.sarif
-#            trivy-results.json
-#            trivy-results.txt
-#          retention-days: 30
-#      # ========================================
-#      # FINAL STATUS SUMMARY
-#      # ========================================
-#      - name: Security Scan Summary
-#        if: always()
-#        run: |
-#          echo "================================================"
-#          echo "🔒 SECURITY SCAN SUMMARY"
-#          echo "================================================"
-#
-#          if [ "${{ steps.codeql_check.outputs.codeql_failed }}" == "true" ]; then
-#            echo "⚠️ CodeQL: FAILED (Critical issues found)"
-#          else
-#            echo "✅ CodeQL: PASSED"
-#          fi
-#
-#          if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
-#            echo "⚠️ SonarQube: SKIPPED (Unavailable)"
-#          elif [ "${{ steps.quality_gate.outcome }}" == "failure" ]; then
-#            echo "⚠️ SonarQube Quality Gate: FAILED"
-#          else
-#            echo "✅ SonarQube: PASSED"
-#          fi
-#
-#          if [ "${{ steps.trivy_scan.outcome }}" == "failure" ]; then
-#            echo "⚠️ Trivy Scan: FAILED (Vulnerabilities found)"
-#          else
-#            echo "✅ Trivy Scan: PASSED"
-#          fi
-#
-#          echo "================================================"
-#          echo "📦 All artifacts and reports have been uploaded"
-#          echo "📄 Check SECURITY-SUMMARY.md for complete overview"
-#          echo "================================================"
+          echo "All artifacts have been uploaded"
+          echo "================================================

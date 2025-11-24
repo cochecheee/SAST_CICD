@@ -24,23 +24,23 @@ jobs:
 
       - name: Pull Docker Image from CI
         run: |
-          echo "🐳 Pulling Docker image from Docker Hub..."
+          echo "Pulling Docker image from Docker Hub..."
           docker pull ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-          echo "✅ Image pulled successfully"
+          echo "Image pulled successfully"
           docker images | grep aloute-spring
 
       - name: Verify Docker Image
         run: |
-          echo "🔍 Verifying Docker image..."
+          echo "Verifying Docker image..."
           docker inspect ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-          echo "✅ Image verified"
+          echo "Image verified"
 
       - name: Deploy to Render
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
-          echo "🚀 Deploying to Render..."
+          echo "Deploying to Render..."
           echo "Service ID: ${RENDER_SERVICE_ID}"
           
           # Simple deployment trigger
@@ -54,17 +54,17 @@ jobs:
           DEPLOY_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
           
           if [ -z "$DEPLOY_ID" ] || [ "$DEPLOY_ID" == "null" ]; then
-            echo "❌ Failed to trigger deployment"
+            echo "Failed to trigger deployment"
             ERROR_MSG=$(echo "$RESPONSE" | jq -r '.message // .error // "Unknown error"')
             echo "Error details: $ERROR_MSG"
             exit 1
           fi
           
-          echo "✅ Deployment triggered successfully"
+          echo "Deployment triggered successfully"
           echo "Deploy ID: $DEPLOY_ID"
           
           # Wait for deployment to complete
-          echo "⏳ Waiting for deployment to complete..."
+          echo "Waiting for deployment to complete..."
           MAX_WAIT=900
           ELAPSED=0
           LAST_STATUS=""
@@ -83,7 +83,7 @@ jobs:
             fi
           
             if [ "$STATUS" == "live" ]; then
-              echo "✅ Deployment completed successfully!"
+              echo "Deployment completed successfully!"
           
               # Get service URL
               SERVICE_INFO=$(curl -s \
@@ -91,11 +91,11 @@ jobs:
                 -H "Authorization: Bearer ${RENDER_API_KEY}")
           
               SERVICE_URL=$(echo "$SERVICE_INFO" | jq -r '.service.serviceDetails.url // "URL not available"')
-              echo "🌐 Service URL: https://${SERVICE_URL}"
-              echo "📊 Dashboard: https://dashboard.render.com/web/${RENDER_SERVICE_ID}"
+              echo "Service URL: https://${SERVICE_URL}"
+              echo "Dashboard: https://dashboard.render.com/web/${RENDER_SERVICE_ID}"
               exit 0
             elif [ "$STATUS" == "build_failed" ] || [ "$STATUS" == "deploy_failed" ] || [ "$STATUS" == "canceled" ]; then
-              echo "❌ Deployment failed with status: $STATUS"
+              echo "Deployment failed with status: $STATUS"
           
               # Try to get logs
               LOGS=$(echo "$DEPLOY_STATUS" | jq -r '.deploy.deployLogs // "No logs available"')
@@ -107,7 +107,7 @@ jobs:
             ELAPSED=$((ELAPSED + 30))
           done
           
-          echo "⚠️ Deployment timeout after ${MAX_WAIT}s"
+          echo "Deployment timeout after ${MAX_WAIT}s"
           echo "Last known status: $STATUS"
           exit 1
 
@@ -115,7 +115,7 @@ jobs:
         if: always()
         run: |
           echo "================================================"
-          echo "📦 DEPLOYMENT SUMMARY"
+          echo "DEPLOYMENT SUMMARY"
           echo "================================================"
           echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest"
           echo "Render Service ID: ${{ secrets.RENDER_SERVICE_ID }}"
