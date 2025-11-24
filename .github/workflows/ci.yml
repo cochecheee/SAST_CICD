@@ -248,64 +248,35 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Debug NVD API Key
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          if [ -z "$NVD_API_KEY" ]; then
+            echo "❌ NVD_API_KEY not found in secrets!"
+          else
+            echo "✅ NVD_API_KEY found (${#NVD_API_KEY} chars)"
+          fi
+
       - name: Run OWASP Dependency-Check
         if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           echo "=========================================="
-          echo "Running OWASP Dependency-Check Analysis"
+          echo "Running OWASP Dependency-Check"
           echo "=========================================="
 
-          # Tạo thư mục reports
           mkdir -p build/reports
 
-          # Build command
-          DC_CMD="./gradlew dependencyCheckAnalyze --no-daemon --info"
+          # Method 1: Via system property
+          ./gradlew dependencyCheckAnalyze \
+            --no-daemon \
+            --info \
+            -Dnvd.api.key="${NVD_API_KEY}"
 
-          # Add NVD API Key if available
-          if [ -n "$NVD_API_KEY" ]; then
-            echo "✅ Using NVD API Key for faster scanning"
-            DC_CMD="$DC_CMD -Dorg.owasp.dependencycheck.data.nvd.apiKey=$NVD_API_KEY"
-          else
-            echo "⚠️  No NVD API Key provided - scanning will be slower"
-            echo "💡 Add NVD_API_KEY secret for faster scans"
-          fi
-
-          # Run Dependency-Check
-          echo "Starting dependency analysis..."
-          eval $DC_CMD
-
-          echo ""
-          echo "=========================================="
-          echo "Dependency-Check Analysis Completed"
-          echo "=========================================="
-
-          # Verify reports were generated
-          if [ -f "build/reports/dependency-check-report.json" ]; then
-            echo "✅ JSON report generated"
-            echo "   Size: $(du -h build/reports/dependency-check-report.json | cut -f1)"
-          else
-            echo "❌ JSON report NOT found"
-          fi
-
-          if [ -f "build/reports/dependency-check-report.html" ]; then
-            echo "✅ HTML report generated"
-            echo "   Size: $(du -h build/reports/dependency-check-report.html | cut -f1)"
-          else
-            echo "❌ HTML report NOT found"
-          fi
-
-          if [ -f "build/reports/dependency-check-report.xml" ]; then
-            echo "✅ XML report generated"
-            echo "   Size: $(du -h build/reports/dependency-check-report.xml | cut -f1)"
-          else
-            echo "⚠️  XML report NOT found"
-          fi
-
-          echo ""
-          echo "All generated files in build/reports/:"
-          ls -lh build/reports/ || echo "No reports directory found"
+          echo "✅ Completed"
+          ls -lh build/reports/
         continue-on-error: true
 
       - name: SonarQube Scan with Dependency-Check Results
