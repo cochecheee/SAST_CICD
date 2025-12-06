@@ -9,7 +9,6 @@ services:
       POSTGRES_DB: sonar
     volumes:
       - sonar_db_data:/var/lib/postgresql/data
-      - ./plugins:/opt/sonarqube/extensions/plugins
 
   sonarqube:
     image: sonarqube:25.10.0.114319-community
@@ -27,6 +26,7 @@ services:
       - sonarqube_extensions:/opt/sonarqube/extensions
       - sonarqube_logs:/opt/sonarqube/logs
       - sonarqube_temp:/opt/sonarqube/temp
+      - ./plugins:/opt/sonarqube/extensions/plugins
 
 volumes:
   sonarqube_conf:
