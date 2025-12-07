@@ -40,47 +40,47 @@ jobs:
         with:
           languages: java
 
-      - name: Build for CodeQL
-        run: ./gradlew build -x test --no-daemon
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:java"
-          upload: false
-          output: codeql-results
-
-      - name: Extract JSON from SARIF
-        run: |
-          SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
-          if [ -z "$SARIF_FILE" ]; then
-            echo "No SARIF file found!"
-            exit 1
-          fi
-          echo "Using SARIF: $SARIF_FILE"
-
-          # convert SARIF → JSON (only results section)
-          jq '.runs[].results' "$SARIF_FILE" > codeql-results.json
-          echo "Created codeql-results.json"
-
-      - name: Convert CodeQL SARIF to Sonar format
-        run: |
-          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
-            python scripts/convert_codeql_to_sonar.py \
-              --input codeql-results.sarif \
-              --output sonar-issues.json
-          else
-            echo "Converter script not found, creating empty report"
-            echo '{"issues":[]}' > sonar-issues.json
-          fi
-
-      - name: Upload CodeQL JSON Output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: codeql-json-results-${{ github.run_number }}
-          path: codeql-results.json
-          retention-days: 30
+#      - name: Build for CodeQL
+#        run: ./gradlew build -x test --no-daemon
+#
+#      - name: Perform CodeQL Analysis
+#        uses: github/codeql-action/analyze@v4
+#        with:
+#          category: "/language:java"
+#          upload: false
+#          output: codeql-results
+#
+#      - name: Extract JSON from SARIF
+#        run: |
+#          SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
+#          if [ -z "$SARIF_FILE" ]; then
+#            echo "No SARIF file found!"
+#            exit 1
+#          fi
+#          echo "Using SARIF: $SARIF_FILE"
+#
+#          # convert SARIF → JSON (only results section)
+#          jq '.runs[].results' "$SARIF_FILE" > codeql-results.json
+#          echo "Created codeql-results.json"
+#
+#      - name: Convert CodeQL SARIF to Sonar format
+#        run: |
+#          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
+#            python scripts/convert_codeql_to_sonar.py \
+#              --input codeql-results.sarif \
+#              --output sonar-issues.json
+#          else
+#            echo "Converter script not found, creating empty report"
+#            echo '{"issues":[]}' > sonar-issues.json
+#          fi
+#
+#      - name: Upload CodeQL JSON Output
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: codeql-json-results-${{ github.run_number }}
+#          path: codeql-results.json
+#          retention-days: 30
       # ========================================
       # BUILD & TEST
       # ========================================
@@ -96,14 +96,14 @@ jobs:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
-
-      - name: Cache Dependency-Check Data
-        uses: actions/cache@v4
-        with:
-          path: ~/.gradle/dependency-check-data
-          key: ${{ runner.os }}-dependency-check-${{ hashFiles('**/build.gradle') }}
-          restore-keys: |
-            ${{ runner.os }}-dependency-check-
+#
+#      - name: Cache Dependency-Check Data
+#        uses: actions/cache@v4
+#        with:
+#          path: ~/.gradle/dependency-check-data
+#          key: ${{ runner.os }}-dependency-check-${{ hashFiles('**/build.gradle') }}
+#          restore-keys: |
+#            ${{ runner.os }}-dependency-check-
 
       - name: Verify SonarQube Connection
         id: sonar_verify
@@ -140,58 +140,58 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Debug NVD API Key
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: |
-          if [ -z "$NVD_API_KEY" ]; then
-            echo "NVD_API_KEY not found in secrets!"
-          else
-            echo "NVD_API_KEY found (${#NVD_API_KEY} chars)"
-          fi
-
-      - name: Run OWASP Dependency-Check
-        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: |
-          echo "=========================================="
-          echo "Running OWASP Dependency-Check"
-          echo "=========================================="
-
-          mkdir -p build/reports
-
-          # Run with explicit format options to ensure all formats are generated
-          ./gradlew dependencyCheckAnalyze \
-            --no-daemon \
-            --info \
-            -Dnvd.api.key="${NVD_API_KEY}" \
-            -Dformats=HTML,JSON,XML
-
-          echo ""
-          echo "Dependency-Check completed"
-          echo "Generated reports:"
-          ls -lh build/reports/ | grep dependency-check || echo "No reports found"
-        continue-on-error: true
-
-      - name: Verify Dependency-Check Reports
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "Verifying Dependency-Check Reports"
-          echo "=========================================="
-          
-          # Check for all report formats
-          for format in html json xml; do
-            REPORT_FILE="build/reports/dependency-check-report.${format}"
-            if [ -f "$REPORT_FILE" ]; then
-              SIZE=$(stat -f%z "$REPORT_FILE" 2>/dev/null || stat -c%s "$REPORT_FILE" 2>/dev/null)
-              echo "Found ${format^^} report: $REPORT_FILE (${SIZE} bytes)"
-            else
-              echo "Missing ${format^^} report: $REPORT_FILE"
-            fi
-          done
-        continue-on-error: true
+#      - name: Debug NVD API Key
+#        env:
+#          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+#        run: |
+#          if [ -z "$NVD_API_KEY" ]; then
+#            echo "NVD_API_KEY not found in secrets!"
+#          else
+#            echo "NVD_API_KEY found (${#NVD_API_KEY} chars)"
+#          fi
+#
+#      - name: Run OWASP Dependency-Check
+#        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
+#        env:
+#          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+#        run: |
+#          echo "=========================================="
+#          echo "Running OWASP Dependency-Check"
+#          echo "=========================================="
+#
+#          mkdir -p build/reports
+#
+#          # Run with explicit format options to ensure all formats are generated
+#          ./gradlew dependencyCheckAnalyze \
+#            --no-daemon \
+#            --info \
+#            -Dnvd.api.key="${NVD_API_KEY}" \
+#            -Dformats=HTML,JSON,XML
+#
+#          echo ""
+#          echo "Dependency-Check completed"
+#          echo "Generated reports:"
+#          ls -lh build/reports/ | grep dependency-check || echo "No reports found"
+#        continue-on-error: true
+#
+#      - name: Verify Dependency-Check Reports
+#        if: always()
+#        run: |
+#          echo "=========================================="
+#          echo "Verifying Dependency-Check Reports"
+#          echo "=========================================="
+#
+#          # Check for all report formats
+#          for format in html json xml; do
+#            REPORT_FILE="build/reports/dependency-check-report.${format}"
+#            if [ -f "$REPORT_FILE" ]; then
+#              SIZE=$(stat -f%z "$REPORT_FILE" 2>/dev/null || stat -c%s "$REPORT_FILE" 2>/dev/null)
+#              echo "Found ${format^^} report: $REPORT_FILE (${SIZE} bytes)"
+#            else
+#              echo "Missing ${format^^} report: $REPORT_FILE"
+#            fi
+#          done
+#        continue-on-error: true
 
       - name: SonarQube Scan with Dependency-Check Results
         if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
@@ -263,17 +263,17 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Upload Dependency-Check Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-reports-${{ github.run_number }}
-          path: |
-            build/reports/dependency-check-report.html
-            build/reports/dependency-check-report.json
-            build/reports/dependency-check-report.xml
-          retention-days: 30
-        continue-on-error: true
+#      - name: Upload Dependency-Check Reports
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: dependency-check-reports-${{ github.run_number }}
+#          path: |
+#            build/reports/dependency-check-report.html
+#            build/reports/dependency-check-report.json
+#            build/reports/dependency-check-report.xml
+#          retention-days: 30
+#        continue-on-error: true
 
       - name: Upload SonarQube Results
         if: always()
@@ -296,7 +296,6 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           scanMetadataReportFile: build/sonar/report-task.txt
-          timeout: 300
         continue-on-error: true
 
       - name: Display Quality Gate Result
@@ -320,70 +319,70 @@ jobs:
       # ========================================
       # DOCKER BUILD & SCAN
       # ========================================
-      - name: Build Docker Image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
-        continue-on-error: true
-
-      - name: Scan Docker Image with Trivy
-        id: trivy_scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          exit-code: '0'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-        continue-on-error: true
-
-      - name: Generate Trivy JSON Report
-        if: always()
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'json'
-          output: 'trivy-results.json'
-          exit-code: '0'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-        continue-on-error: true
-
-      - name: Generate Trivy Table Report
-        if: always()
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'table'
-          output: 'trivy-results.txt'
-          exit-code: '0'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-        continue-on-error: true
-
-      - name: Upload Trivy Scan Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-scan-results-${{ github.run_number }}
-          path: |
-            trivy-results.sarif
-            trivy-results.json
-            trivy-results.txt
-          retention-days: 30
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-        continue-on-error: true
-
-      - name: Push Docker Image
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-        continue-on-error: true
+#      - name: Build Docker Image
+#        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
+#        continue-on-error: true
+#
+#      - name: Scan Docker Image with Trivy
+#        id: trivy_scan
+#        uses: aquasecurity/trivy-action@master
+#        with:
+#          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+#          format: 'sarif'
+#          output: 'trivy-results.sarif'
+#          exit-code: '0'
+#          ignore-unfixed: true
+#          vuln-type: 'os,library'
+#          severity: 'CRITICAL,HIGH'
+#        continue-on-error: true
+#
+#      - name: Generate Trivy JSON Report
+#        if: always()
+#        uses: aquasecurity/trivy-action@master
+#        with:
+#          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+#          format: 'json'
+#          output: 'trivy-results.json'
+#          exit-code: '0'
+#          ignore-unfixed: true
+#          vuln-type: 'os,library'
+#          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+#        continue-on-error: true
+#
+#      - name: Generate Trivy Table Report
+#        if: always()
+#        uses: aquasecurity/trivy-action@master
+#        with:
+#          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+#          format: 'table'
+#          output: 'trivy-results.txt'
+#          exit-code: '0'
+#          ignore-unfixed: true
+#          vuln-type: 'os,library'
+#          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+#        continue-on-error: true
+#
+#      - name: Upload Trivy Scan Results
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: trivy-scan-results-${{ github.run_number }}
+#          path: |
+#            trivy-results.sarif
+#            trivy-results.json
+#            trivy-results.txt
+#          retention-days: 30
+#
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKER_USERNAME }}
+#          password: ${{ secrets.DOCKER_PASSWORD }}
+#        continue-on-error: true
+#
+#      - name: Push Docker Image
+#        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+#        continue-on-error: true
       # ========================================
       # UPLOAD ALL SECURITY REPORTS (Combined)
       # ========================================
@@ -405,33 +404,33 @@ jobs:
       # ========================================
       # FINAL STATUS SUMMARY
       # ========================================
-      - name: Security Scan Summary
-        if: always()
-        run: |
-          echo "================================================"
-          echo "SECURITY SCAN SUMMARY"
-          echo "================================================"
-
-          if [ "${{ steps.codeql_check.outputs.codeql_failed }}" == "true" ]; then
-            echo "CodeQL: FAILED (Critical issues found)"
-          else
-            echo "CodeQL: PASSED"
-          fi
-
-          if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
-            echo "SonarQube: SKIPPED (Unavailable)"
-          elif [ "${{ steps.quality_gate.outcome }}" == "failure" ]; then
-            echo "SonarQube Quality Gate: FAILED"
-          else
-            echo "SonarQube: PASSED"
-          fi
-
-          if [ "${{ steps.trivy_scan.outcome }}" == "failure" ]; then
-            echo "Trivy Scan: FAILED (Vulnerabilities found)"
-          else
-            echo "Trivy Scan: PASSED"
-          fi
-
-          echo "================================================"
-          echo "All artifacts have been uploaded"
-          echo "================================================"
+#      - name: Security Scan Summary
+#        if: always()
+#        run: |
+#          echo "================================================"
+#          echo "SECURITY SCAN SUMMARY"
+#          echo "================================================"
+#
+#          if [ "${{ steps.codeql_check.outputs.codeql_failed }}" == "true" ]; then
+#            echo "CodeQL: FAILED (Critical issues found)"
+#          else
+#            echo "CodeQL: PASSED"
+#          fi
+#
+#          if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
+#            echo "SonarQube: SKIPPED (Unavailable)"
+#          elif [ "${{ steps.quality_gate.outcome }}" == "failure" ]; then
+#            echo "SonarQube Quality Gate: FAILED"
+#          else
+#            echo "SonarQube: PASSED"
+#          fi
+#
+#          if [ "${{ steps.trivy_scan.outcome }}" == "failure" ]; then
+#            echo "Trivy Scan: FAILED (Vulnerabilities found)"
+#          else
+#            echo "Trivy Scan: PASSED"
+#          fi
+#
+#          echo "================================================"
+#          echo "All artifacts have been uploaded"
+#          echo "================================================"

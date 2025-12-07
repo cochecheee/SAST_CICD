@@ -60,26 +60,6 @@ dependencies {
     runtimeOnly 'com.h2database:h2'               // Add for prod
 }
 
-//sonar {
-//    properties {
-//        property "sonar.projectKey", "sast-social"
-//        property "sonar.projectName", "sast-social"
-//        // Source directories
-//        property "sonar.sources", "src/main/java"
-//        property "sonar.tests", "src/test/java"
-//        property "sonar.java.binaries", "build/classes/java/main"
-//        property "sonar.java.test.binaries", "build/classes/java/test"
-//        // External reports (optional - can be overridden via command line)
-//        property "sonar.externalIssuesReportPaths", "sonar-issues.json"
-//        property "sonar.dependencyCheck.xmlReportPath", "build/reports/dependency-check-report.xml"
-//        property "sonar.dependencyCheck.jsonReportPath", "build/reports/dependency-check-report.json"
-//        // Exclusions
-//        property "sonar.exclusions", "**/test/**,**/build/**,**/node_modules/**"
-//        property "sonar.test.exclusions", "**/test/**"
-//    }
-//}
-//
-
 tasks.named('test') {
     useJUnitPlatform()
 }
