@@ -78,6 +78,7 @@ dependencies {
 //        property "sonar.test.exclusions", "**/test/**"
 //    }
 //}
+//
 
 tasks.named('test') {
     useJUnitPlatform()
