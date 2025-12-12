@@ -63,11 +63,32 @@ jobs:
           jq '.runs[].results' "$SARIF_FILE" > codeql-results.json
           echo "Created codeql-results.json"
 
+#      - name: Convert CodeQL SARIF to Sonar format
+#        run: |
+#          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
+#            python scripts/convert_codeql_to_sonar.py \
+#              --input codeql-results.sarif \
+#              --output sonar-issues.json
+#          else
+#            echo "Converter script not found, creating empty report"
+#            echo '{"issues":[]}' > sonar-issues.json
+#          fi
       - name: Convert CodeQL SARIF to Sonar format
         run: |
+          # Find the actual SARIF file
+          SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
+
+          if [ -z "$SARIF_FILE" ]; then
+            echo "No SARIF file found, creating empty report"
+            echo '{"issues":[]}' > sonar-issues.json
+            exit 0
+          fi
+
+          echo "Found SARIF file: $SARIF_FILE"
+
           if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
             python scripts/convert_codeql_to_sonar.py \
-              --input codeql-results.sarif \
+              --input "$SARIF_FILE" \
               --output sonar-issues.json
           else
             echo "Converter script not found, creating empty report"
