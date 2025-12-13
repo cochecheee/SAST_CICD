@@ -47,7 +47,7 @@ cloud:
   aws:
     enabled: false
     credentials:
-      access-key: ${S3_ACCESS_KEY:}
+      access-key: ${S3_ACCESS_KEY:no-key}
       secret-key: ${S3_SECRET_KEY:}
     region:
       static: ${S3_REGION:ap-southeast-2}
