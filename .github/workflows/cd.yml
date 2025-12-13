@@ -2,7 +2,7 @@ name: CD Workflow
 
 on:
   workflow_run:
-    workflows: ["CI Workflow - Skipped"]
+    workflows: ["CI Workflow"]
     types: [completed]
     branches:
       - main
