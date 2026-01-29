@@ -13,7 +13,6 @@ description = "Ignore placeholder tokens globally (all files)"
 regexTarget = "match"  # Kiểm tra toàn bộ match (không chỉ secret)
 regexes = [
     '''YOUR_JWT_TOKEN''',  # Bỏ qua chính xác chuỗi này
-    '''DUMMY_TOKEN''',      # Thêm nếu cần bỏ qua placeholder khác
     '''SONAR_TOKEN'''      # Thêm nếu cần bỏ qua placeholder khác
 ]
 # Không có paths: Áp dụng cho tất cả file (global ignore)

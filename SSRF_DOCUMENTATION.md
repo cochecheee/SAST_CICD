@@ -118,7 +118,7 @@ KogFVkSUT9y3s8wc02n1pedom0sNvD82ArmBKZAR
 for i in {1..254}; do
   curl -X POST http://localhost:8081/api/posts/preview-url \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer YOUR_JWT_TOKEN" q\
+    -H "Authorization: Bearer YOUR_JWT_TOKENN" q\
     -d "{\"url\": \"http://192.168.1.$i\"}"
 done
 ```

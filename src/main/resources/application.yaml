@@ -173,3 +173,4 @@ logging:
     com.nhoclahola.socialnetworkv1: INFO
     org.springframework.web: INFO
     org.hibernate: WARN
+
