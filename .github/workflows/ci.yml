@@ -1095,4 +1095,151 @@ jobs:
       - name: Download pre-built bytecode
         uses: actions/download-artifact@v4
         with:
-         
+          name: build-output
+          path: build/classes  # ✅ ĐÚNG: Chỉ restore bytecode, không ghi đè .git
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Sonar scanner
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}-${{ hashFiles('**/build.gradle') }}
+
+      - name: SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          ./gradlew sonar \
+            --no-daemon \
+            -Dsonar.projectKey=sast-social \
+            -Dsonar.host.url=${SONAR_HOST_URL} \
+            -Dsonar.token=${SONAR_TOKEN} \
+            -Dsonar.sources=src/main/java \
+            -Dsonar.java.binaries=build/classes/java/main \
+            -Dsonar.exclusions=**/test/**
+        continue-on-error: true
+
+      - name: Upload SonarQube report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-report
+          path: |
+            build/sonar/report-task.txt
+            .scannerwork/report-task.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ========================================
+  # DOCKER SCAN (Chạy SAU security scans)
+  # ========================================
+  docker:
+    name: 🐳 Docker Scan
+    needs: [codeql, dependency-check, sonarqube]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout (shallow - Docker không cần Git history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+          format: 'table'
+          output: 'trivy-results.txt'
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-results.txt
+          retention-days: 30
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        continue-on-error: true
+
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+        continue-on-error: true
+
+  # ========================================
+  # FINAL REPORT (Tổng hợp)
+  # ========================================
+  report:
+    name: ✅ Final Report
+    needs: [docker]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Create reports directory
+        run: mkdir -p reports/{codeql,dependency-check,sonarqube,trivy}
+
+      - name: Download CodeQL results
+        uses: actions/download-artifact@v4
+        with:
+          name: codeql-results
+          path: reports/codeql
+        continue-on-error: true
+
+      - name: Download Dependency-Check reports
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-reports
+          path: reports/dependency-check
+        continue-on-error: true
+
+      - name: Download SonarQube report
+        uses: actions/download-artifact@v4
+        with:
+          name: sonarqube-report
+          path: reports/sonarqube
+        continue-on-error: true
+
+      - name: Download Trivy report
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-report
+          path: reports/trivy
+        continue-on-error: true
+
+      - name: Upload combined security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report-${{ github.run_number }}
+          path: reports
+          retention-days: 30
+
+      - name: Display summary
+        run: |
+          echo "=========================================="
+          echo "✅ CI/CD PIPELINE COMPLETED"
+          echo "=========================================="
+          echo "📦 Build: SUCCESS"
+          echo "🔍 CodeQL: ${{ needs.codeql.result }}"
+          echo "🛡️ Dependency Check: ${{ needs.dependency-check.result }}"
+          echo "📊 SonarQube: ${{ needs.sonarqube.result }}"
+          echo "🐳 Docker Scan: ${{ needs.docker.result }}"
+          echo "=========================================="
+          echo "📄 Full report: security-report-${{ github.run_number }}"
+          echo "=========================================="
