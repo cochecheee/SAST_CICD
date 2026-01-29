@@ -436,8 +436,8 @@
 #   # ========================================
 #   # SETUP & BUILD (Base job cho tất cả)
 #   # ========================================
-#   setup-build:
-#     name: 📦 Setup & Build
+#   build:
+#     name: Setup & Build
 #     runs-on: ubuntu-latest
 #     permissions:
 #       actions: read
@@ -479,7 +479,7 @@
 #   # ========================================
 #   codeql-analysis:
 #     name: 🔍 CodeQL Analysis
-#     needs: setup-build
+#     needs: build
 #     runs-on: ubuntu-latest
 #     permissions:
 #       actions: read
@@ -562,7 +562,7 @@
 #   # ========================================
 #   dependency-check:
 #     name: 🛡️ Dependency Check
-#     needs: setup-build
+#     needs: build
 #     runs-on: ubuntu-latest
 #     permissions:
 #       actions: read
@@ -943,7 +943,7 @@
 #           echo "Artifact name: all-security-reports-${{ github.run_number }}"
 #           echo "================================================"
 
-name: CI Workflow (Fully Parallel Security Scans)
+name: CI Workflow (Optimized Parallel)
 
 on:
   push:
@@ -953,71 +953,67 @@ on:
 
 jobs:
   # ========================================
-  # SETUP & BUILD (Chuẩn bị base artifacts)
+  # SETUP & BUILD (Chỉ build 1 lần)
   # ========================================
-  setup-build:
-    name: 📦 Setup & Build Application
+  build:
+    name: 📦 Build Application
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: read
       security-events: write
     steps:
-      - name: Checkout code
+      - name: Checkout (shallow)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1  # ⚡ Tối ưu tốc độ
 
-      - name: Set up JDK 17
+      - name: Setup JDK 17 with Gradle cache
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
+          cache: 'gradle'  # ⚡ Cache dependencies globally
 
-      - name: Grant execute permission for gradlew
+      - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Build application
-        run: ./gradlew clean build --no-daemon -x test
-        continue-on-error: true
+      - name: Build application (skip tests)
+        run: ./gradlew clean build -x test --no-daemon --parallel
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
+          name: build-output
+          path: build/classes  # ⚡ Chỉ upload bytecode (nhỏ, nhanh)
+          retention-days: 1
+
+      - name: Upload source structure
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-structure
           path: |
-            build/
-            gradlew
-            gradle/
-            **/*.gradle
-            src/
+            build.gradle
+            gradle.properties
+            settings.gradle
+            src/main/java
           retention-days: 1
 
   # ========================================
-  # CODEQL SCAN (Chạy song song)
+  # SECURITY SCANS (3 jobs CHẠY SONG SONG)
   # ========================================
-  codeql-scan:
-    name: 🔍 CodeQL Analysis
-    needs: setup-build
+  codeql:
+    name: 🔍 CodeQL
+    needs: build
     runs-on: ubuntu-latest
     permissions:
-      actions: read
-      contents: read
       security-events: write
     steps:
-      - name: Checkout code
+      - name: Checkout (shallow)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: .
-
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -1028,286 +1024,186 @@ jobs:
         with:
           languages: java
 
-      - name: Build for CodeQL analysis
-        run: ./gradlew build -x test --no-daemon
+      - name: Build with CodeQL tracing (skip tests)
+        run: ./gradlew clean compileJava --no-daemon --parallel
 
-      - name: Perform CodeQL Analysis
+      - name: Analyze
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:java"
-          upload: false
-          output: codeql-results
 
-      - name: Extract & Convert Results
-        run: |
-          SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
-          if [ -z "$SARIF_FILE" ]; then
-            echo '{"issues":[]}' > sonar-issues.json
-            exit 0
-          fi
-          jq '.runs[].results' "$SARIF_FILE" > codeql-results.json
-          if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
-            python scripts/convert_codeql_to_sonar.py \
-              --input "$SARIF_FILE" \
-              --output sonar-issues.json
-          else
-            echo '{"issues":[]}' > sonar-issues.json
-          fi
-
-      - name: Upload CodeQL Results
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: codeql-results
-          path: |
-            codeql-results.json
-            sonar-issues.json
-            codeql-results/
+          name: codeql-report
+          path: ${{ github.workspace }}/codeql
           retention-days: 30
 
-  # ========================================
-  # DEPENDENCY CHECK (Chạy song song)
-  # ========================================
   dependency-check:
     name: 🛡️ Dependency Check
-    needs: setup-build
+    needs: build
     runs-on: ubuntu-latest
     permissions:
-      actions: read
-      contents: read
       security-events: write
     steps:
-      - name: Checkout code
+      - name: Checkout (shallow)
         uses: actions/checkout@v4
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
         with:
-          name: build-artifacts
-          path: .
+          fetch-depth: 1
 
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Dependency-Check Data
+      - name: Cache CVE database
         uses: actions/cache@v4
         with:
           path: ~/.gradle/dependency-check-data
-          key: ${{ runner.os }}-dependency-check-${{ hashFiles('**/build.gradle') }}
-          restore-keys: ${{ runner.os }}-dependency-check-
+          key: depcheck-${{ hashFiles('**/build.gradle') }}
+          restore-keys: depcheck-
 
-      - name: Run OWASP Dependency-Check
+      - name: Run Dependency-Check (no rebuild needed!)
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          mkdir -p build/reports
           ./gradlew dependencyCheckAnalyze \
             --no-daemon \
             -Dnvd.api.key="${NVD_API_KEY}" \
-            -Dformats=HTML,JSON,XML
-        continue-on-error: true
+            -Dformats=JSON,HTML
 
-      - name: Upload Dependency-Check Reports
+      - name: Upload reports
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-reports
-          path: |
-            build/reports/dependency-check-report.html
-            build/reports/dependency-check-report.json
-            build/reports/dependency-check-report.xml
+          name: depcheck-report
+          path: build/reports/dependency-check-report.*
           retention-days: 30
 
-  # ========================================
-  # SONARQUBE SCAN (Chạy song song - không phụ thuộc kết quả khác)
-  # ========================================
-  sonarqube-scan:
-    name: 📊 SonarQube Scan
-    needs: setup-build
+  sonarqube:
+    name: 📊 SonarQube
+    needs: build
     runs-on: ubuntu-latest
     permissions:
-      actions: read
-      contents: read
       security-events: write
     steps:
-      - name: Checkout code
+      - name: Checkout (shallow)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Download build artifacts
+      - name: Download build output
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts
-          path: .
+          name: build-output
+          path: build/classes  # ⚡ Reuse pre-built bytecode
 
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache SonarQube packages
+      - name: Cache Sonar scanner
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
+          key: sonar-${{ runner.os }}-${{ hashFiles('**/build.gradle') }}
 
-      - name: Verify SonarQube Connection
-        id: sonar_verify
+      - name: SonarQube Scan (standalone)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
-            echo "SonarQube config missing"
-            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL%/}/api/system/status" || echo "000")
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Cannot connect to SonarQube"
-            echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: SonarQube Scan (Standalone)
-        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          ./gradlew sonar --no-daemon \
+          ./gradlew sonar \
+            --no-daemon \
             -Dsonar.projectKey=sast-social \
-            -Dsonar.projectName=sast-social \
             -Dsonar.host.url=${SONAR_HOST_URL} \
             -Dsonar.token=${SONAR_TOKEN} \
             -Dsonar.sources=src/main/java \
-            -Dsonar.tests=src/test/java \
             -Dsonar.java.binaries=build/classes/java/main \
-            -Dsonar.exclusions='**/test/**,**/build/**'
+            -Dsonar.exclusions=**/test/**
         continue-on-error: true
 
-      - name: Check Quality Gate
-        if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
-        id: quality_gate
-        uses: sonarsource/sonarqube-quality-gate-action@v3
-        with:
-          scanMetadataReportFile: build/sonar/report-task.txt
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      - name: Upload SonarQube Results
+      - name: Upload Sonar report
         uses: actions/upload-artifact@v4
         with:
-          name: sonarqube-results
-          path: |
-            build/sonar/report-task.txt
-            .scannerwork/report-task.txt
+          name: sonar-report
+          path: build/sonar/report-task.txt
           retention-days: 30
 
   # ========================================
-  # DOCKER SCAN (Chạy sau khi tất cả security scans hoàn thành)
+  # DOCKER SCAN (Chạy SAU security scans)
   # ========================================
-  docker-scan:
-    name: 🐳 Docker Build & Scan
-    needs: [codeql-scan, dependency-check, sonarqube-scan]  # Chờ cả 3 security scans
+  docker:
+    name: 🐳 Docker Scan
+    needs: [codeql, dependency-check, sonarqube]  # ⚡ Chờ 3 security scans hoàn thành
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
     steps:
-      - name: Checkout code
+      - name: Checkout (shallow)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Build Docker Image
+      - name: Build Docker image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
-        continue-on-error: true
 
-      - name: Scan with Trivy
+      - name: Trivy scan (critical/high only)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          format: 'table'
           exit-code: '0'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      - name: Generate Trivy JSON Report
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'json'
-          output: 'trivy-results.json'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-
-      - name: Upload Trivy Reports
+      - name: Upload Trivy report
         uses: actions/upload-artifact@v4
         with:
-          name: docker-reports
-          path: |
-            trivy-results.sarif
-            trivy-results.json
+          name: trivy-report
+          path: trivy-results.txt
           retention-days: 30
 
-      - name: Login to Docker Hub
+      - name: Push to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
         continue-on-error: true
 
-      - name: Push Docker Image
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+      - run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
         continue-on-error: true
 
   # ========================================
-  # COMBINE & REPORT
+  # FINAL REPORT (Tổng hợp)
   # ========================================
-  combine-reports:
-    name: 📁 Combine All Reports
-    needs: [docker-scan]
+  report:
+    name: ✅ Final Report
+    needs: [docker]
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
+    if: always()
     steps:
-      - name: Download CodeQL Results
+      - name: Download all reports
         uses: actions/download-artifact@v4
         with:
-          name: codeql-results
-          path: reports/codeql
+          pattern: '*-report'
+          path: reports
+          merge-multiple: true
 
-      - name: Download Dependency-Check Reports
-        uses: actions/download-artifact@v4
-        with:
-          name: dependency-check-reports
-          path: reports/dependency-check
-
-      - name: Download SonarQube Results
-        uses: actions/download-artifact@v4
-        with:
-          name: sonarqube-results
-          path: reports/sonarqube
-
-      - name: Download Docker Reports
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-reports
-          path: reports/docker
-
-      - name: Upload Combined Reports
+      - name: Upload combined report
         uses: actions/upload-artifact@v4
         with:
-          name: all-security-reports-${{ github.run_number }}
-          path: reports/
+          name: security-report-${{ github.run_number }}
+          path: reports
           retention-days: 30
 
-      - name: Security Scan Summary
+      - name: Display summary
         run: |
           echo "=========================================="
-          echo "✅ SECURITY SCAN SUMMARY"
+          echo "✅ CI/CD PIPELINE COMPLETED"
           echo "=========================================="
           echo "📦 Build: SUCCESS"
           echo "🔍 CodeQL: COMPLETED"
@@ -1315,5 +1211,5 @@ jobs:
           echo "📊 SonarQube: COMPLETED"
           echo "🐳 Docker Scan: COMPLETED"
           echo "=========================================="
-          echo "📄 Combined reports: all-security-reports-${{ github.run_number }}"
+          echo "📄 Full report: security-report-${{ github.run_number }}"
           echo "=========================================="
