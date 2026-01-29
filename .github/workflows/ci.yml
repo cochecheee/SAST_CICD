@@ -942,7 +942,8 @@
 #           echo "All security reports have been combined and uploaded"
 #           echo "Artifact name: all-security-reports-${{ github.run_number }}"
 #           echo "================================================"
-name: CI Workflow (Optimized Parallel)
+
+name: CI Workflow (Fully Parallel Security Scans)
 
 on:
   push:
@@ -994,17 +995,16 @@ jobs:
           retention-days: 1
 
   # ========================================
-  # SECURITY SCANS (Chạy song song trong 1 job - tối ưu)
+  # CODEQL SCAN (Chạy song song)
   # ========================================
-  security-scans:
-    name: 🔒 Security Scans (CodeQL + Dependency-Check + SonarQube)
+  codeql-scan:
+    name: 🔍 CodeQL Analysis
     needs: setup-build
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       security-events: write
-      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -1023,7 +1023,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # ---------- CODEQL ANALYSIS ----------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -1039,17 +1038,14 @@ jobs:
           upload: false
           output: codeql-results
 
-      - name: Extract & Convert CodeQL Results
+      - name: Extract & Convert Results
         run: |
           SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
           if [ -z "$SARIF_FILE" ]; then
-            echo "No SARIF file found, creating empty report"
             echo '{"issues":[]}' > sonar-issues.json
             exit 0
           fi
-          # Extract JSON results
           jq '.runs[].results' "$SARIF_FILE" > codeql-results.json
-          # Convert to SonarQube format
           if [ -f "scripts/convert_codeql_to_sonar.py" ]; then
             python scripts/convert_codeql_to_sonar.py \
               --input "$SARIF_FILE" \
@@ -1058,7 +1054,43 @@ jobs:
             echo '{"issues":[]}' > sonar-issues.json
           fi
 
-      # ---------- DEPENDENCY CHECK ----------
+      - name: Upload CodeQL Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results
+          path: |
+            codeql-results.json
+            sonar-issues.json
+            codeql-results/
+          retention-days: 30
+
+  # ========================================
+  # DEPENDENCY CHECK (Chạy song song)
+  # ========================================
+  dependency-check:
+    name: 🛡️ Dependency Check
+    needs: setup-build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
       - name: Cache Dependency-Check Data
         uses: actions/cache@v4
         with:
@@ -1077,7 +1109,43 @@ jobs:
             -Dformats=HTML,JSON,XML
         continue-on-error: true
 
-      # ---------- SONARQUBE SCAN ----------
+      - name: Upload Dependency-Check Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-reports
+          path: |
+            build/reports/dependency-check-report.html
+            build/reports/dependency-check-report.json
+            build/reports/dependency-check-report.xml
+          retention-days: 30
+
+  # ========================================
+  # SONARQUBE SCAN (Chạy song song - không phụ thuộc kết quả khác)
+  # ========================================
+  sonarqube-scan:
+    name: 📊 SonarQube Scan
+    needs: setup-build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
       - name: Cache SonarQube packages
         uses: actions/cache@v4
         with:
@@ -1092,23 +1160,23 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           if [ -z "$SONAR_HOST_URL" ] || [ -z "$SONAR_TOKEN" ]; then
-            echo "SonarQube config missing, skipping scan"
+            echo "SonarQube config missing"
             echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
             exit 0
           fi
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL%/}/api/system/status" || echo "000")
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "Cannot connect to SonarQube (HTTP $HTTP_CODE)"
+            echo "Cannot connect to SonarQube"
             echo "sonar_unavailable=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: SonarQube Scan with Security Results
+      - name: SonarQube Scan (Standalone)
         if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          SONAR_CMD="./gradlew sonar --no-daemon \
+          ./gradlew sonar --no-daemon \
             -Dsonar.projectKey=sast-social \
             -Dsonar.projectName=sast-social \
             -Dsonar.host.url=${SONAR_HOST_URL} \
@@ -1116,20 +1184,10 @@ jobs:
             -Dsonar.sources=src/main/java \
             -Dsonar.tests=src/test/java \
             -Dsonar.java.binaries=build/classes/java/main \
-            -Dsonar.exclusions='**/test/**,**/build/**'"
-          
-          # Add Dependency-Check reports if available
-          [ -f "build/reports/dependency-check-report.json" ] && \
-            SONAR_CMD="$SONAR_CMD -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json"
-          
-          # Add CodeQL external issues
-          [ -f "sonar-issues.json" ] && \
-            SONAR_CMD="$SONAR_CMD -Dsonar.externalIssuesReportPaths=sonar-issues.json"
-          
-          eval $SONAR_CMD
+            -Dsonar.exclusions='**/test/**,**/build/**'
         continue-on-error: true
 
-      - name: Check SonarQube Quality Gate
+      - name: Check Quality Gate
         if: steps.sonar_verify.outputs.sonar_unavailable != 'true'
         id: quality_gate
         uses: sonarsource/sonarqube-quality-gate-action@v3
@@ -1138,25 +1196,21 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # ---------- UPLOAD SECURITY REPORTS ----------
-      - name: Upload Security Reports
+      - name: Upload SonarQube Results
         uses: actions/upload-artifact@v4
         with:
-          name: security-reports
+          name: sonarqube-results
           path: |
-            codeql-results.json
-            sonar-issues.json
-            build/reports/dependency-check-report.*
             build/sonar/report-task.txt
             .scannerwork/report-task.txt
           retention-days: 30
 
   # ========================================
-  # DOCKER SCAN (Chạy sau security scans)
+  # DOCKER SCAN (Chạy sau khi tất cả security scans hoàn thành)
   # ========================================
   docker-scan:
     name: 🐳 Docker Build & Scan
-    needs: security-scans  # Chạy SAU security scans theo yêu cầu
+    needs: [codeql-scan, dependency-check, sonarqube-scan]  # Chờ cả 3 security scans
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1169,7 +1223,7 @@ jobs:
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
         continue-on-error: true
 
-      - name: Scan with Trivy (SARIF)
+      - name: Scan with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
@@ -1212,18 +1266,30 @@ jobs:
   # COMBINE & REPORT
   # ========================================
   combine-reports:
-    name: 📊 Combine All Reports
-    needs: [security-scans, docker-scan]
+    name: 📁 Combine All Reports
+    needs: [docker-scan]
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
     steps:
-      - name: Download Security Reports
+      - name: Download CodeQL Results
         uses: actions/download-artifact@v4
         with:
-          name: security-reports
-          path: reports/security
+          name: codeql-results
+          path: reports/codeql
+
+      - name: Download Dependency-Check Reports
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-reports
+          path: reports/dependency-check
+
+      - name: Download SonarQube Results
+        uses: actions/download-artifact@v4
+        with:
+          name: sonarqube-results
+          path: reports/sonarqube
 
       - name: Download Docker Reports
         uses: actions/download-artifact@v4
@@ -1243,10 +1309,11 @@ jobs:
           echo "=========================================="
           echo "✅ SECURITY SCAN SUMMARY"
           echo "=========================================="
-          echo "📦 Application Build: SUCCESS"
-          echo "🔍 Code Analysis: CodeQL + Dependency-Check + SonarQube"
-          echo "🐳 Container Security: Trivy Scan"
+          echo "📦 Build: SUCCESS"
+          echo "🔍 CodeQL: COMPLETED"
+          echo "🛡️ Dependency Check: COMPLETED"
+          echo "📊 SonarQube: COMPLETED"
+          echo "🐳 Docker Scan: COMPLETED"
           echo "=========================================="
-          echo "📄 All reports available in artifact:"
-          echo "   all-security-reports-${{ github.run_number }}"
+          echo "📄 Combined reports: all-security-reports-${{ github.run_number }}"
           echo "=========================================="
