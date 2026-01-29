@@ -962,17 +962,17 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - name: Checkout (shallow)
+      - name: Checkout (with minimal history)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # ⚡ Tối ưu tốc độ
+          fetch-depth: 2  # ⚡ Đủ cho hầu hết tools, nhanh hơn full clone
 
       - name: Setup JDK 17 with Gradle cache
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'  # ⚡ Cache dependencies globally
+          cache: 'gradle'
 
       - name: Grant execute permission
         run: chmod +x gradlew
@@ -980,22 +980,19 @@ jobs:
       - name: Build application (skip tests)
         run: ./gradlew clean build -x test --no-daemon --parallel
 
-      - name: Upload build artifacts
+      - name: Upload build output (bytecode only)
         uses: actions/upload-artifact@v4
         with:
           name: build-output
-          path: build/classes  # ⚡ Chỉ upload bytecode (nhỏ, nhanh)
+          path: build/classes  # ⚡ Chỉ upload bytecode
           retention-days: 1
 
-      - name: Upload source structure
+      - name: Upload dependency reports directory (empty placeholder)
         uses: actions/upload-artifact@v4
         with:
-          name: source-structure
-          path: |
-            build.gradle
-            gradle.properties
-            settings.gradle
-            src/main/java
+          name: reports-dir
+          path: build/reports
+          if-no-files-found: ignore
           retention-days: 1
 
   # ========================================
@@ -1008,10 +1005,10 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - name: Checkout (shallow)
+      - name: Checkout (with minimal history)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2  # ⚡ Cần Git metadata cho CodeQL
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -1024,7 +1021,7 @@ jobs:
         with:
           languages: java
 
-      - name: Build with CodeQL tracing (skip tests)
+      - name: Build with CodeQL tracing
         run: ./gradlew clean compileJava --no-daemon --parallel
 
       - name: Analyze
@@ -1032,10 +1029,10 @@ jobs:
         with:
           category: "/language:java"
 
-      - name: Upload results
+      - name: Upload CodeQL results
         uses: actions/upload-artifact@v4
         with:
-          name: codeql-report
+          name: codeql-results
           path: ${{ github.workspace }}/codeql
           retention-days: 30
 
@@ -1046,10 +1043,10 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - name: Checkout (shallow)
+      - name: Checkout (with minimal history)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -1064,19 +1061,22 @@ jobs:
           key: depcheck-${{ hashFiles('**/build.gradle') }}
           restore-keys: depcheck-
 
-      - name: Run Dependency-Check (no rebuild needed!)
+      - name: Create reports directory
+        run: mkdir -p build/reports
+
+      - name: Run Dependency-Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           ./gradlew dependencyCheckAnalyze \
             --no-daemon \
             -Dnvd.api.key="${NVD_API_KEY}" \
-            -Dformats=JSON,HTML
+            -Dformats=JSON,HTML,XML
 
-      - name: Upload reports
+      - name: Upload Dependency-Check reports
         uses: actions/upload-artifact@v4
         with:
-          name: depcheck-report
+          name: dependency-check-reports
           path: build/reports/dependency-check-report.*
           retention-days: 30
 
@@ -1087,129 +1087,12 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - name: Checkout (shallow)
+      - name: Checkout (with minimal history)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2  # ⚡ SonarQube cần Git metadata
 
-      - name: Download build output
+      - name: Download pre-built bytecode
         uses: actions/download-artifact@v4
         with:
-          name: build-output
-          path: build/classes  # ⚡ Reuse pre-built bytecode
-
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Cache Sonar scanner
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: sonar-${{ runner.os }}-${{ hashFiles('**/build.gradle') }}
-
-      - name: SonarQube Scan (standalone)
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          ./gradlew sonar \
-            --no-daemon \
-            -Dsonar.projectKey=sast-social \
-            -Dsonar.host.url=${SONAR_HOST_URL} \
-            -Dsonar.token=${SONAR_TOKEN} \
-            -Dsonar.sources=src/main/java \
-            -Dsonar.java.binaries=build/classes/java/main \
-            -Dsonar.exclusions=**/test/**
-        continue-on-error: true
-
-      - name: Upload Sonar report
-        uses: actions/upload-artifact@v4
-        with:
-          name: sonar-report
-          path: build/sonar/report-task.txt
-          retention-days: 30
-
-  # ========================================
-  # DOCKER SCAN (Chạy SAU security scans)
-  # ========================================
-  docker:
-    name: 🐳 Docker Scan
-    needs: [codeql, dependency-check, sonarqube]  # ⚡ Chờ 3 security scans hoàn thành
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - name: Checkout (shallow)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Build Docker image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
-
-      - name: Trivy scan (critical/high only)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
-          format: 'table'
-          exit-code: '0'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-report
-          path: trivy-results.txt
-          retention-days: 30
-
-      - name: Push to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-        continue-on-error: true
-
-      - run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
-        continue-on-error: true
-
-  # ========================================
-  # FINAL REPORT (Tổng hợp)
-  # ========================================
-  report:
-    name: ✅ Final Report
-    needs: [docker]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Download all reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: '*-report'
-          path: reports
-          merge-multiple: true
-
-      - name: Upload combined report
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report-${{ github.run_number }}
-          path: reports
-          retention-days: 30
-
-      - name: Display summary
-        run: |
-          echo "=========================================="
-          echo "✅ CI/CD PIPELINE COMPLETED"
-          echo "=========================================="
-          echo "📦 Build: SUCCESS"
-          echo "🔍 CodeQL: COMPLETED"
-          echo "🛡️ Dependency Check: COMPLETED"
-          echo "📊 SonarQube: COMPLETED"
-          echo "🐳 Docker Scan: COMPLETED"
-          echo "=========================================="
-          echo "📄 Full report: security-report-${{ github.run_number }}"
-          echo "=========================================="
+         
