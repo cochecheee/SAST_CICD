@@ -951,6 +951,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read        # Bắt buộc cho checkout private repo
+  security-events: write
+  actions: read
+
 jobs:
   # ========================================
   # SETUP & BUILD (Chỉ build 1 lần)
@@ -958,16 +963,14 @@ jobs:
   build:
     name: 📦 Build Application
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
     steps:
-      - name: Checkout (with minimal history)
+      - name: Checkout repository (safe)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # ⚡ Đủ cho hầu hết tools, nhanh hơn full clone
+          fetch-depth: 2
+          persist-credentials: true  # Giữ credentials cho private repo
 
-      - name: Setup JDK 17 with Gradle cache
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -977,22 +980,14 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Build application (skip tests)
+      - name: Build application
         run: ./gradlew clean build -x test --no-daemon --parallel
 
-      - name: Upload build output (bytecode only)
+      - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
           name: build-output
-          path: build/classes  # ⚡ Chỉ upload bytecode
-          retention-days: 1
-
-      - name: Upload dependency reports directory (empty placeholder)
-        uses: actions/upload-artifact@v4
-        with:
-          name: reports-dir
-          path: build/reports
-          if-no-files-found: ignore
+          path: build/classes/java/main  # ⚡ Chỉ upload bytecode thực sự cần thiết
           retention-days: 1
 
   # ========================================
@@ -1005,10 +1000,11 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - name: Checkout (with minimal history)
+      - name: Checkout repository (safe)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # ⚡ Cần Git metadata cho CodeQL
+          fetch-depth: 2
+          persist-credentials: true
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -1029,7 +1025,7 @@ jobs:
         with:
           category: "/language:java"
 
-      - name: Upload CodeQL results
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: codeql-results
@@ -1043,10 +1039,11 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - name: Checkout (with minimal history)
+      - name: Checkout repository (safe)
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: true
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -1061,19 +1058,17 @@ jobs:
           key: depcheck-${{ hashFiles('**/build.gradle') }}
           restore-keys: depcheck-
 
-      - name: Create reports directory
-        run: mkdir -p build/reports
-
       - name: Run Dependency-Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
+          mkdir -p build/reports
           ./gradlew dependencyCheckAnalyze \
             --no-daemon \
             -Dnvd.api.key="${NVD_API_KEY}" \
             -Dformats=JSON,HTML,XML
 
-      - name: Upload Dependency-Check reports
+      - name: Upload reports
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-reports
@@ -1087,16 +1082,17 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - name: Checkout (with minimal history)
+      - name: Checkout repository (safe)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # ⚡ SonarQube cần Git metadata
+          fetch-depth: 2
+          persist-credentials: true
 
-      - name: Download pre-built bytecode
+      - name: Download pre-built bytecode (SAFE - không ghi đè .git)
         uses: actions/download-artifact@v4
         with:
           name: build-output
-          path: build/classes  # ✅ ĐÚNG: Chỉ restore bytecode, không ghi đè .git
+          path: build/classes/java/main  # ✅ ĐÚNG: Chỉ restore vào thư mục con
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -1125,19 +1121,17 @@ jobs:
             -Dsonar.exclusions=**/test/**
         continue-on-error: true
 
-      - name: Upload SonarQube report
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sonarqube-report
-          path: |
-            build/sonar/report-task.txt
-            .scannerwork/report-task.txt
+          path: build/sonar/
           if-no-files-found: ignore
           retention-days: 30
 
   # ========================================
-  # DOCKER SCAN (Chạy SAU security scans)
+  # DOCKER SCAN
   # ========================================
   docker:
     name: 🐳 Docker Scan
@@ -1147,10 +1141,11 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - name: Checkout (shallow - Docker không cần Git history)
+      - name: Checkout repository (safe)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: true
 
       - name: Build Docker image
         run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
@@ -1165,26 +1160,25 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
 
-      - name: Upload Trivy report
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report
           path: trivy-results.txt
           retention-days: 30
 
-      - name: Login to Docker Hub
+      - name: Login & Push to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
         continue-on-error: true
 
-      - name: Push Docker image
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+      - run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
         continue-on-error: true
 
   # ========================================
-  # FINAL REPORT (Tổng hợp)
+  # FINAL REPORT
   # ========================================
   report:
     name: ✅ Final Report
@@ -1192,38 +1186,20 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Create reports directory
-        run: mkdir -p reports/{codeql,dependency-check,sonarqube,trivy}
+      - name: Create reports structure
+        run: |
+          mkdir -p reports/{codeql,dependency-check,sonarqube,trivy}
+          echo "Pipeline completed at $(date)" > reports/SUMMARY.txt
 
-      - name: Download CodeQL results
+      - name: Download all reports
         uses: actions/download-artifact@v4
         with:
-          name: codeql-results
-          path: reports/codeql
+          pattern: '*-results|*-reports|*-report'
+          path: reports
+          merge-multiple: true
         continue-on-error: true
 
-      - name: Download Dependency-Check reports
-        uses: actions/download-artifact@v4
-        with:
-          name: dependency-check-reports
-          path: reports/dependency-check
-        continue-on-error: true
-
-      - name: Download SonarQube report
-        uses: actions/download-artifact@v4
-        with:
-          name: sonarqube-report
-          path: reports/sonarqube
-        continue-on-error: true
-
-      - name: Download Trivy report
-        uses: actions/download-artifact@v4
-        with:
-          name: trivy-report
-          path: reports/trivy
-        continue-on-error: true
-
-      - name: Upload combined security report
+      - name: Upload combined report
         uses: actions/upload-artifact@v4
         with:
           name: security-report-${{ github.run_number }}
@@ -1235,11 +1211,8 @@ jobs:
           echo "=========================================="
           echo "✅ CI/CD PIPELINE COMPLETED"
           echo "=========================================="
-          echo "📦 Build: SUCCESS"
-          echo "🔍 CodeQL: ${{ needs.codeql.result }}"
-          echo "🛡️ Dependency Check: ${{ needs.dependency-check.result }}"
-          echo "📊 SonarQube: ${{ needs.sonarqube.result }}"
-          echo "🐳 Docker Scan: ${{ needs.docker.result }}"
-          echo "=========================================="
-          echo "📄 Full report: security-report-${{ github.run_number }}"
+          echo "🔍 CodeQL:       ${{ needs.codeql.result }}"
+          echo "🛡️ Dependency:   ${{ needs.dependency-check.result }}"
+          echo "📊 SonarQube:    ${{ needs.sonarqube.result }}"
+          echo "🐳 Docker:       ${{ needs.docker.result }}"
           echo "=========================================="
