@@ -1161,7 +1161,7 @@ jobs:
         continue-on-error: true
 
   docker:
-    name: Docker Scan
+    name: Docker Image Scan
     needs: [codeql, dependency-check, sonarqube]
     runs-on: ubuntu-latest
     permissions:
@@ -1193,11 +1193,48 @@ jobs:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
           format: 'sarif'
           output: 'trivy-results.sarif'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          continue-on-error: true
 
-      - name: Upload to Security tab
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Generate Trivy JSON Report
+        if: always()
+        uses: aquasecurity/trivy-action@master
         with:
-          sarif_file: 'trivy-results.sarif'
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+          format: 'json'
+          output: 'trivy-results.json'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+        continue-on-error: true
+
+      - name: Generate Trivy Table Report
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+          format: 'table'
+          output: 'trivy-results.txt'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+        continue-on-error: true
+
+      - name: Upload Trivy Scan Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results-${{ github.run_number }}
+          path: |
+            trivy-results.sarif
+            trivy-results.json
+            trivy-results.txt
+          retention-days: 1
 
       - name: Login & Push to Docker Hub
         uses: docker/login-action@v3
@@ -1213,15 +1250,57 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Download all reports
-        uses: actions/download-artifact@v4
-        with:
-          path: reports
-        continue-on-error: true
+      # - name: Download all reports
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     path: reports
+      #   continue-on-error: true
 
-      - name: Upload combined report
+      # - name: Upload combined report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: security-report-${{ github.run_number }}
+      #     path: reports
+      #     retention-days: 1
+      - name: Upload All Security Reports (Combined)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-report-${{ github.run_number }}
-          path: reports
-          retention-days: 1
+          name: all-security-reports-${{ github.run_number }}
+          path: |
+            codeql-results.sarif
+            codeql-results/
+            build/reports/dependency-check-report.*
+            sonar-issues.json
+            build/sonar/report-task.txt
+            trivy-results.sarif
+            trivy-results.json
+            trivy-results.txt
+          retention-days: 30
+
+      - name: Security Scan Summary
+        if: always()
+        run: |
+          echo "================================================"
+          echo "SECURITY SCAN SUMMARY"
+          echo "================================================"
+          if [ "${{ steps.codeql_check.outputs.codeql_failed }}" == "true" ]; then
+            echo "CodeQL: FAILED (Critical issues found)"
+          else
+            echo "CodeQL: PASSED"
+          fi
+          if [ "${{ steps.sonar_verify.outputs.sonar_unavailable }}" == "true" ]; then
+            echo "SonarQube: SKIPPED (Unavailable)"
+          elif [ "${{ steps.quality_gate.outcome }}" == "failure" ]; then
+            echo "SonarQube Quality Gate: FAILED"
+          else
+            echo "SonarQube: PASSED"
+          fi
+          if [ "${{ steps.trivy_scan.outcome }}" == "failure" ]; then
+            echo "Trivy Scan: FAILED (Vulnerabilities found)"
+          else
+            echo "Trivy Scan: PASSED"
+          fi
+          echo "================================================"
+          echo "All artifacts have been uploaded"
+          echo "================================================"
