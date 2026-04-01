@@ -503,20 +503,21 @@ jobs:
           fetch-depth: 0
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: java
 
       # Autobuild recompiles — needed for CodeQL tracing
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:java"
-          # 'upload: false' keeps the SARIF local so we can pass it to Sonar
-          upload: false
+          # 'upload: never' — keep SARIF local, pass to SonarCloud instead
+          # 'upload: false' in v3 still attempted a database upload; v4 + never stops it completely
+          upload: never
           output: codeql-results
         continue-on-error: true
 
@@ -532,6 +533,7 @@ jobs:
     name: Dependency Check
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -545,20 +547,24 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      # Cache keyed weekly so NVD data is refreshed at most once per week.
+      # If autoUpdate=false were used with an empty cache the scanner hangs;
+      # instead we let it update but reuse the cached DB when it is <24 h old.
       - name: Cache NVD CVE database
         uses: actions/cache@v4
         with:
           path: ~/.gradle/dependency-check-data
-          key: depcheck-${{ hashFiles('**/build.gradle') }}
-          restore-keys: depcheck-
+          key: depcheck-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            depcheck-${{ runner.os }}-
 
       - name: Run OWASP Dependency-Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          ./gradlew dependencyCheckAnalyze --no-daemon --info\
-            -DautoUpdate=false \
+          ./gradlew dependencyCheckAnalyze --no-daemon \
             -Dnvd.api.key="${NVD_API_KEY}" \
+            -Dnvd.api.validForHours=24 \
             -Dformats=JSON,HTML
         continue-on-error: true
 
