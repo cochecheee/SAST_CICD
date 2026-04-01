@@ -68,8 +68,8 @@ tasks.named('test') {
 // SpotBugs: output SARIF (for SonarQube import), don't fail the build
 spotbugs {
     ignoreFailures = true
-    effort.set(com.github.spotbugs.snom.Effort.DEFAULT)
-    reportLevel.set(com.github.spotbugs.snom.Confidence.HIGH)
+    effort = com.github.spotbugs.snom.Effort.DEFAULT
+    reportLevel = com.github.spotbugs.snom.Confidence.HIGH
 }
 
 spotbugsMain {
