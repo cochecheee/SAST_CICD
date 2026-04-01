@@ -397,8 +397,8 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Compile project (skip tests for speed)
-        run: ./gradlew clean compileJava --no-daemon
+      - name: Compile project 
+        run: ./gradlew clean compileJava --no-daemon -x test
 
       - name: Upload compiled classes
         uses: actions/upload-artifact@v4
@@ -441,7 +441,7 @@ jobs:
       # Requires com.github.spotbugs plugin >= 5.x and sarif output format configured in build.gradle:
       #   spotbugs { reportLevel = 'high'; reports { sarif.enabled = true; xml.enabled = false } }
       - name: Run SpotBugs
-        run: ./gradlew spotbugsMain --no-daemon
+        run: ./gradlew spotbugsMain --no-daemon -x test
         continue-on-error: true
 
       - name: Upload SpotBugs SARIF
