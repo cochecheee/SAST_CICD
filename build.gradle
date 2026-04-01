@@ -64,21 +64,3 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
-
-// SpotBugs config
-spotbugs {
-    ignoreFailures = true
-    effort = 'default'
-    reportLevel = 'high'
-}
-
-// Report config (SARIF for Sonar)
-tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
-    reports {
-        sarif.required = true
-        sarif.outputLocation = file("${buildDir}/reports/spotbugs/main.sarif")
-
-        xml.required = false
-        html.required = false
-    }
-}
