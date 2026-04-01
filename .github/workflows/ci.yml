@@ -557,6 +557,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           ./gradlew dependencyCheckAnalyze --no-daemon --info\
+            -DautoUpdate=false \
             -Dnvd.api.key="${NVD_API_KEY}" \
             -Dformats=JSON,HTML
         continue-on-error: true
