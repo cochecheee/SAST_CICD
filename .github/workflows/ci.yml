@@ -361,6 +361,9 @@ permissions:
   security-events: write
   actions: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # ==============================================================================
 # PIPELINE FLOW:
 #   build
@@ -631,16 +634,19 @@ jobs:
           EOF
 
       - name: Run ESLint (SARIF output)
-        # Only scan JS files; allow failure so pipeline continues
+        # Always write an empty SARIF first so the upload step never fails.
+        # The real scan overwrites it if JS files exist.
         run: |
+          EMPTY_SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"ESLint","rules":[]}},"results":[]}]}'
+          echo "$EMPTY_SARIF" > eslint-results.sarif
+
           JS_FILES=$(find src/main/resources/static -name "*.js" 2>/dev/null | head -50)
-          if [ -z "$JS_FILES" ]; then
-            echo "No JS files found, creating empty SARIF"
-            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"ESLint","rules":[]}},"results":[]}]}' > eslint-results.sarif
-          else
+          if [ -n "$JS_FILES" ]; then
             npx eslint $JS_FILES \
               --format @microsoft/eslint-formatter-sarif \
               --output-file eslint-results.sarif || true
+          else
+            echo "No JS files found — keeping empty SARIF"
           fi
         continue-on-error: true
 
@@ -652,16 +658,17 @@ jobs:
           retention-days: 1
 
   # ============================================================
-  # STAGE 3: SONARQUBE — AGGREGATE & IMPORT
-  # Collects every report artifact, then runs a single sonar scan
-  # that imports them all into the dashboard.
+  # STAGE 3: SONARCLOUD — AGGREGATE & IMPORT
+  # Collects every SARIF artifact, runs a single sonar scan that
+  # imports them all into the SonarCloud dashboard.
   #
-  # Required SonarQube plugins (install on server):
-  #   - sonar-dependency-check-plugin
-  #   - sonar-sarif-plugin (or built-in SARIF support >= SQ 9.x)
+  # Required GitHub secrets:
+  #   SONAR_TOKEN        — SonarCloud user token
+  #   SONAR_ORGANIZATION — SonarCloud organization key (e.g. "my-org")
+  #   SONAR_PROJECT_KEY  — SonarCloud project key (e.g. "my-org_repo-name")
   # ============================================================
   sonarqube:
-    name: SonarQube Analysis
+    name: SonarCloud Analysis
     runs-on: ubuntu-latest
     needs: [spotbugs, semgrep, codeql, dependency-check, trivy-fs, eslint]
     # Run even if some scan jobs fail so partial data still reaches Sonar
@@ -720,6 +727,25 @@ jobs:
           path: reports/eslint
         continue-on-error: true
 
+      # ---- Convert Dependency-Check JSON → SARIF ----
+      # SonarCloud has no plugin support, so we convert to SARIF and pass it
+      # via sonar.sarifReportPaths like every other tool.
+      - name: Setup Python for conversion
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Convert Dependency-Check JSON to SARIF
+        run: |
+          if [ -f "reports/depcheck/dependency-check-report.json" ]; then
+            python scripts/depcheck_to_sarif.py \
+              --input  reports/depcheck/dependency-check-report.json \
+              --output reports/depcheck/dependency-check.sarif
+          else
+            echo "No dep-check report found, skipping conversion"
+          fi
+        continue-on-error: true
+
       # ---- Build list of available SARIF files dynamically ----
       # This prevents Sonar from failing when a scan produced no output.
       - name: Collect available SARIF paths
@@ -731,7 +757,8 @@ jobs:
             reports/codeql/java.sarif \
             reports/semgrep/semgrep.sarif \
             reports/trivy/trivy-fs.sarif \
-            reports/eslint/eslint-results.sarif; do
+            reports/eslint/eslint-results.sarif \
+            reports/depcheck/dependency-check.sarif; do
             if [ -f "$f" ]; then
               SARIF_FILES="${SARIF_FILES}${f},"
             else
@@ -758,19 +785,18 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # ---- Import everything into SonarQube ----
-      - name: SonarQube Scan
+      # ---- Import everything into SonarCloud ----
+      - name: SonarCloud Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           ./gradlew sonar --no-daemon \
-            -Dsonar.projectKey=sast-social \
-            -Dsonar.host.url="${SONAR_HOST_URL}" \
+            -Dsonar.host.url="https://sonarcloud.io" \
+            -Dsonar.organization="${{ secrets.SONAR_ORGANIZATION }}" \
+            -Dsonar.projectKey="${{ secrets.SONAR_PROJECT_KEY }}" \
             -Dsonar.token="${SONAR_TOKEN}" \
             -Dsonar.java.binaries=build/classes/java/main \
-            -Dsonar.sarifReportPaths="${{ steps.sarif_paths.outputs.paths }}" \
-            -Dsonar.dependencyCheck.jsonReportPath=reports/depcheck/dependency-check-report.json
+            -Dsonar.sarifReportPaths="${{ steps.sarif_paths.outputs.paths }}"
 
   # ============================================================
   # STAGE 4: DOCKER BUILD & PUSH

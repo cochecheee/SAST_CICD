@@ -64,3 +64,29 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// SpotBugs: output SARIF (for SonarQube import), don't fail the build
+spotbugs {
+    ignoreFailures = true
+    effort = 'default'
+    reportLevel = 'high'
+}
+
+spotbugsMain {
+    reports {
+        sarif {
+            required = true
+            outputLocation = file("${buildDir}/reports/spotbugs/main.sarif")
+        }
+        xml  { required = false }
+        html { required = false }
+    }
+}
+
+spotbugsTest {
+    reports {
+        sarif { required = false }
+        xml   { required = false }
+        html  { required = false }
+    }
+}
