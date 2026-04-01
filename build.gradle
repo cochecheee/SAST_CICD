@@ -61,17 +61,6 @@ dependencies {
     runtimeOnly 'com.h2database:h2'               // Add for prod
 }
 
-spotbugs {
-    ignoreFailures = true
-    reportsDir = file("$buildDir/reports/spotbugs")
-}
-
-spotbugsMain {
-    reports {
-        xml.enabled = false
-        sarif.enabled = true // SonarQube likes SARIF or XML
-    }
-}
 tasks.named('test') {
     useJUnitPlatform()
 }
