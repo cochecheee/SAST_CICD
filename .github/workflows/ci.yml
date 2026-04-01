@@ -348,6 +348,7 @@
 #          echo "================================================"
 #          echo "All artifacts have been uploaded"
 #          echo "================================================"
+##################################################################################################################
 name: CI Workflow
 
 on:
@@ -361,8 +362,8 @@ permissions:
   security-events: write
   actions: read
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+# env:
+#   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ==============================================================================
 # PIPELINE FLOW:

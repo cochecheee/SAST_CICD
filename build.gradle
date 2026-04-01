@@ -71,6 +71,9 @@ spotbugs {
 }
 
 tasks.named('spotbugsMain') {
+    // Without auxClassPaths, SpotBugs crashes on transitive deps (e.g. commons-lang3)
+    // before writing any output — SARIF is never produced.
+    auxClassPaths.from(configurations.runtimeClasspath)
     reports {
         sarif.required = true
         sarif.outputLocation = file("${buildDir}/reports/spotbugs/main.sarif")
@@ -85,4 +88,10 @@ tasks.named('spotbugsTest') {
         xml.required   = false
         html.required  = false
     }
+}
+
+// Dependency-Check: formats must be set here — -Dformats=... is not a valid
+// system property override for the Gradle plugin (it is silently ignored).
+dependencyCheck {
+    formats = ['JSON', 'HTML']
 }
