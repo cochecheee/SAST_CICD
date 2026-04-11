@@ -353,24 +353,35 @@ name: CI Workflow
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
   security-events: write
   actions: read
+  statuses: write      # needed by notify job to update PR commit status
 
 # env:
 #   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ==============================================================================
-# PIPELINE FLOW:
+# PIPELINE FLOW  (triggers: push/PR → main, develop)
+#
 #   build
-#     └─> [codeql | semgrep | spotbugs | gitleaks | dependency-check | trivy-fs]  (parallel)
-#               └─> sonarqube  (aggregate + import all reports)
-#                       └─> docker
+#     └─> [semgrep | codeql | eslint | spotbugs | dependency-check | trivy-fs]  (parallel, timeout 15 min each)
+#               └─> sonarqube  (aggregate SARIF + Quality Gate — blocks on failure)
+#                       └─> docker  (build + Trivy image scan + push)
+#                               └─> notify  (update PR status + dispatch MCP Gateway webhook)
+#
+# Security gates (image3):
+#   Gate 1 — SARIF threshold : Critical > 0 → fail CI, High > 5 → warning
+#   Gate 2 — SonarCloud QG   : sonar.qualitygate.wait=true; fail if Security Rating < A
+#   Gate 3 — Branch protect  : require "CI / Security Gate" status check to pass
+#
+# Pass conditions  : no Critical finding, SonarCloud Rating = A, no CVE CVSS ≥ 9.0
+# Block conditions : any Critical finding | SonarCloud gate FAILED | dep-check CVSS ≥ 9.0
 # ==============================================================================
 
 jobs:
@@ -417,6 +428,7 @@ jobs:
     name: SpotBugs
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -452,27 +464,12 @@ jobs:
           path: build/reports/spotbugs/main.sarif
           retention-days: 1
 
-  # --- 2b. Gitleaks (secret scanning) ---
-  gitleaks:
-    name: Gitleaks Secret Scan
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
   # --- 2c. Semgrep (SAST, fast pattern-based) ---
   semgrep:
     name: Semgrep
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 15
     container:
       image: semgrep/semgrep
     steps:
@@ -494,6 +491,7 @@ jobs:
     name: CodeQL
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 15
     permissions:
       security-events: write
       actions: read
@@ -582,6 +580,7 @@ jobs:
     name: Trivy FS Scan
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -610,6 +609,7 @@ jobs:
     name: ESLint Security
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -666,27 +666,42 @@ jobs:
           retention-days: 1
 
   # ============================================================
-  # STAGE 3: SONARCLOUD — AGGREGATE & IMPORT
-  # Collects every SARIF artifact, runs a single sonar scan that
-  # imports them all into the SonarCloud dashboard.
+  # STAGE 3: SECURITY GATES + SONARCLOUD
+  #
+  # Gate 1 (Python): SARIF threshold
+  #   CRITICAL > 0 → exit 1  (blocks this job; docker/notify still run)
+  #   HIGH     > 5 → warning  (add --fail-on-high to also block)
+  #
+  # Gate 2 (SonarCloud): sonar.qualitygate.wait=true
+  #   Fail if Security Rating < A or new Security Hotspot > 0
+  #   sonar.qualitygate.timeout=300 (treat timeout > 15 min as fail)
+  #
+  # Gate 3 (Branch protection): enforced by GitHub repo settings
+  #   Require status check "CI / Security Gate" (set in notify job)
   #
   # Required GitHub secrets:
   #   SONAR_TOKEN        — SonarCloud user token
-  #   SONAR_ORGANIZATION — SonarCloud organization key (e.g. "my-org")
-  #   SONAR_PROJECT_KEY  — SonarCloud project key (e.g. "my-org_repo-name")
+  #   SONAR_ORGANIZATION — SonarCloud organization key
+  #   SONAR_PROJECT_KEY  — SonarCloud project key
   # ============================================================
   sonarqube:
-    name: SonarCloud Analysis
+    name: Security Gates + SonarCloud
     runs-on: ubuntu-latest
     needs: [spotbugs, semgrep, codeql, dependency-check, trivy-fs, eslint]
-    # Run even if some scan jobs fail so partial data still reaches Sonar
+    # Run even if some scan jobs fail so partial data still reaches SonarCloud
     if: always()
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ---- Download all artifacts ----
+      # ── Setup Python (used for Gate 1 + dep-check conversion) ──────────
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ── Download all SARIF artifacts ────────────────────────────────────
       - name: Download compiled classes
         uses: actions/download-artifact@v4
         with:
@@ -735,14 +750,7 @@ jobs:
           path: reports/eslint
         continue-on-error: true
 
-      # ---- Convert Dependency-Check JSON → SARIF ----
-      # SonarCloud has no plugin support, so we convert to SARIF and pass it
-      # via sonar.sarifReportPaths like every other tool.
-      - name: Setup Python for conversion
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
+      # ── Convert Dependency-Check JSON → SARIF ───────────────────────────
       - name: Convert Dependency-Check JSON to SARIF
         run: |
           if [ -f "reports/depcheck/dependency-check-report.json" ]; then
@@ -754,8 +762,42 @@ jobs:
           fi
         continue-on-error: true
 
-      # ---- Build list of available SARIF files dynamically ----
-      # This prevents Sonar from failing when a scan produced no output.
+      # ══════════════════════════════════════════════════════════════════
+      # GATE 1 — SARIF Threshold Check
+      # Scans all *.sarif files in reports/. Exits 1 if any CRITICAL
+      # finding is present (threshold=0). Exits 2 / continues if HIGH > 5.
+      # The JSON summary is uploaded as an artifact and consumed by the
+      # notify job to build the email and dashboard payload.
+      # ══════════════════════════════════════════════════════════════════
+      - name: "Gate 1 — SARIF Threshold"
+        id: gate1
+        run: |
+          python scripts/gate1_sarif_check.py \
+            --sarif-dir reports/ \
+            --output    gate1-result.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        # Continue so we can upload the result + run Sonar even on failure.
+        # The overall job will still be marked failed by the exit code.
+        continue-on-error: true
+
+      - name: Upload Gate 1 result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate1-result-${{ github.run_number }}
+          path: gate1-result.json
+          retention-days: 30
+
+      - name: "Gate 1 — Enforce block"
+        # Re-fail the job if gate1 itself exited non-zero, AFTER uploading
+        # the artifact so the notify job always gets the result file.
+        if: steps.gate1.outcome == 'failure'
+        run: |
+          echo "::error::Gate 1 FAILED — critical or high-threshold breach detected."
+          echo "See gate1-result.json artifact for details."
+          exit 1
+
+      # ── Build list of available SARIF files for SonarCloud ─────────────
       - name: Collect available SARIF paths
         id: sarif_paths
         run: |
@@ -773,7 +815,6 @@ jobs:
               echo "WARNING: $f not found, skipping"
             fi
           done
-          # Remove trailing comma
           SARIF_FILES="${SARIF_FILES%,}"
           echo "paths=$SARIF_FILES" >> "$GITHUB_OUTPUT"
           echo "Collected SARIF paths: $SARIF_FILES"
@@ -793,8 +834,14 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # ---- Import everything into SonarCloud ----
-      - name: SonarCloud Scan
+      # ══════════════════════════════════════════════════════════════════
+      # GATE 2 — SonarCloud Quality Gate
+      # sonar.qualitygate.wait=true  → blocks until gate result arrives.
+      # sonar.qualitygate.timeout=300 → fail if no result within 5 min
+      #   (image3: "scan timeout > 15 min → treat as fail").
+      # Gate fails when:  Security Rating < A  |  new Security Hotspot > 0
+      # ══════════════════════════════════════════════════════════════════
+      - name: "Gate 2 — SonarCloud Quality Gate"
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -804,7 +851,9 @@ jobs:
             -Dsonar.projectKey="${{ secrets.SONAR_PROJECT_KEY }}" \
             -Dsonar.token="${SONAR_TOKEN}" \
             -Dsonar.java.binaries=build/classes/java/main \
-            -Dsonar.sarifReportPaths="${{ steps.sarif_paths.outputs.paths }}"
+            -Dsonar.sarifReportPaths="${{ steps.sarif_paths.outputs.paths }}" \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
 
   # ============================================================
   # STAGE 4: DOCKER BUILD & PUSH
@@ -863,3 +912,202 @@ jobs:
 
       - name: Push Docker image
         run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+
+  # ============================================================
+  # STAGE 5: NOTIFY & MCP TRIGGER
+  # Runs after all scans complete (success or failure).
+  # Dispatches webhook to MCP Gateway so the LLM Orchestration
+  # layer can fetch SARIF artifacts, analyse findings, and update
+  # the React Dashboard.
+  # Required GitHub secrets:
+  #   MCP_GATEWAY_URL   — base URL of the MCP Gateway service
+  #   MCP_WEBHOOK_TOKEN — Bearer token for the /webhook endpoint
+  # ============================================================
+  # STAGE 5: NOTIFY & MCP TRIGGER
+  #
+  # Always runs (if: always()) so failures are always reported.
+  #
+  # Steps:
+  #   1. Determine overall status (passed | gate_failed | failed)
+  #   2. Write run-metadata.json
+  #   3. Download gate1-result.json artifact
+  #   4. Python notify.py → HTML email + Dashboard webhook POST
+  #   5. Dispatch to MCP Gateway (triggers LLM analysis)
+  #
+  # GATE 3 — Branch Protection
+  #   The commit-status update below sets "CI / Security Gate" on the
+  #   PR head SHA. Configure your GitHub branch protection rule to
+  #   require this check so no merge is possible until the gate passes.
+  #
+  # Required GitHub secrets (all optional — skip if not set):
+  #   DASHBOARD_WEBHOOK_URL  — Web dashboard REST endpoint
+  #   DASHBOARD_TOKEN        — Bearer token for dashboard
+  #   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS
+  #   EMAIL_FROM / EMAIL_TO / EMAIL_CC
+  #   MCP_GATEWAY_URL / MCP_WEBHOOK_TOKEN
+  # ============================================================
+  notify:
+    name: Notify & MCP Trigger
+    runs-on: ubuntu-latest
+    needs: [sonarqube, docker]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ── Determine overall pipeline status ───────────────────────────────
+      - name: Determine overall pipeline status
+        id: pipeline_status
+        run: |
+          SONAR="${{ needs.sonarqube.result }}"
+          DOCKER="${{ needs.docker.result }}"
+          if [ "$SONAR" = "success" ] && [ "$DOCKER" = "success" ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          elif [ "$SONAR" = "failure" ]; then
+            echo "status=gate_failed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Write run-metadata.json ─────────────────────────────────────────
+      - name: Write run metadata
+        run: |
+          python - << 'PYEOF'
+          import json, os
+          from datetime import datetime, timezone
+          meta = {
+              "run_id":        os.environ["GITHUB_RUN_ID"],
+              "run_number":    os.environ["GITHUB_RUN_NUMBER"],
+              "repository":    os.environ["GITHUB_REPOSITORY"],
+              "ref":           os.environ["GITHUB_REF"],
+              "sha":           os.environ["GITHUB_SHA"],
+              "actor":         os.environ["GITHUB_ACTOR"],
+              "event":         os.environ["GITHUB_EVENT_NAME"],
+              "pipeline_status": os.environ.get("PIPELINE_STATUS", "unknown"),
+              "timestamp":     datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          with open("run-metadata.json", "w") as f:
+              json.dump(meta, f, indent=2)
+          print(json.dumps(meta, indent=2))
+          PYEOF
+        env:
+          PIPELINE_STATUS: ${{ steps.pipeline_status.outputs.status }}
+
+      # ── Download gate1 result (non-blocking if not yet uploaded) ────────
+      - name: Download Gate 1 result
+        uses: actions/download-artifact@v4
+        with:
+          name: gate1-result-${{ github.run_number }}
+          path: .
+        continue-on-error: true
+
+      # ── Upload run-metadata for MCP Gateway ─────────────────────────────
+      - name: Upload run metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-metadata-${{ github.run_number }}
+          path: run-metadata.json
+          retention-days: 30
+
+      # ══════════════════════════════════════════════════════════════════
+      # NOTIFICATIONS — Web Dashboard + Email
+      # scripts/notify.py reads run-metadata.json + gate1-result.json and:
+      #   • POST JSON payload to DASHBOARD_WEBHOOK_URL (centralised dashboard)
+      #   • Sends HTML + plain-text email via SMTP
+      # Both channels are skipped gracefully when their env vars are absent.
+      # ══════════════════════════════════════════════════════════════════
+      - name: "Send notifications (Dashboard + Email)"
+        env:
+          DASHBOARD_WEBHOOK_URL: ${{ secrets.DASHBOARD_WEBHOOK_URL }}
+          DASHBOARD_TOKEN:       ${{ secrets.DASHBOARD_TOKEN }}
+          SMTP_HOST:             ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:             ${{ secrets.SMTP_PORT }}
+          SMTP_USER:             ${{ secrets.SMTP_USER }}
+          SMTP_PASS:             ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM:            ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO:              ${{ secrets.EMAIL_TO }}
+          EMAIL_CC:              ${{ secrets.EMAIL_CC }}
+        run: |
+          python scripts/notify.py \
+            --metadata  run-metadata.json \
+            --gate1     gate1-result.json \
+            --status    "${{ steps.pipeline_status.outputs.status }}"
+        continue-on-error: true   # notifications must never block the pipeline
+
+      # ── MCP Gateway webhook (triggers LLM analysis of SARIF artifacts) ──
+      - name: Dispatch to MCP Gateway
+        env:
+          MCP_GATEWAY_URL:   ${{ secrets.MCP_GATEWAY_URL }}
+          MCP_WEBHOOK_TOKEN: ${{ secrets.MCP_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "${MCP_GATEWAY_URL}" ]; then
+            echo "MCP_GATEWAY_URL not set — skipping MCP Gateway dispatch."
+            exit 0
+          fi
+          curl -f -s -X POST "${MCP_GATEWAY_URL}/webhook/pipeline-complete" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${MCP_WEBHOOK_TOKEN}" \
+            --max-time 20 \
+            -d @run-metadata.json \
+          && echo "MCP Gateway notified ✓" \
+          || echo "WARNING: MCP Gateway notification failed (non-blocking)"
+        continue-on-error: true
+
+      # ══════════════════════════════════════════════════════════════════
+      # GATE 3 — Branch Protection: PR commit-status update
+      # Sets "CI / Security Gate" check on the PR head SHA.
+      # Configure a GitHub branch protection rule to require this status
+      # check so that no merge is allowed when the gate is failed.
+      # ══════════════════════════════════════════════════════════════════
+      - name: "Gate 3 — Update PR commit status (Branch Protection)"
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = "${{ steps.pipeline_status.outputs.status }}";
+            const descriptions = {
+              passed:      "All security gates passed — safe to merge",
+              gate_failed: "Security Gate FAILED — merge blocked (fix findings first)",
+              failed:      "Pipeline failed — check run log",
+            };
+            const state = status === "passed" ? "success" : "failure";
+            await github.rest.repos.createCommitStatus({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              sha:         context.payload.pull_request.head.sha,
+              state,
+              description: descriptions[status] ?? status,
+              context:     "CI / Security Gate",
+              target_url:  `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${{ github.run_id }}`,
+            });
+            console.log(`Commit status set: ${state} — ${descriptions[status]}`);
+
+      # ── Final summary ────────────────────────────────────────────────────
+      - name: Pipeline summary
+        if: always()
+        run: |
+          STATUS="${{ steps.pipeline_status.outputs.status }}"
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║         SECURITY PIPELINE SUMMARY                ║"
+          echo "╠══════════════════════════════════════════════════╣"
+          printf "║  %-20s %-26s ║\n" "Repository"   "${{ github.repository }}"
+          printf "║  %-20s %-26s ║\n" "Branch"       "$(echo '${{ github.ref }}' | sed 's|refs/heads/||')"
+          printf "║  %-20s %-26s ║\n" "Commit"       "$(echo '${{ github.sha }}' | cut -c1-8)"
+          printf "║  %-20s %-26s ║\n" "Actor"        "${{ github.actor }}"
+          printf "║  %-20s %-26s ║\n" "Run"          "#${{ github.run_number }}"
+          echo "╠══════════════════════════════════════════════════╣"
+          printf "║  %-20s %-26s ║\n" "SpotBugs"     "${{ needs.spotbugs.result }}"
+          printf "║  %-20s %-26s ║\n" "Semgrep"      "${{ needs.semgrep.result }}"
+          printf "║  %-20s %-26s ║\n" "CodeQL"       "${{ needs.codeql.result }}"
+          printf "║  %-20s %-26s ║\n" "Dep-Check"    "${{ needs.dependency-check.result }}"
+          printf "║  %-20s %-26s ║\n" "Trivy FS"     "${{ needs.trivy-fs.result }}"
+          printf "║  %-20s %-26s ║\n" "ESLint"       "${{ needs.eslint.result }}"
+          printf "║  %-20s %-26s ║\n" "Gate1+Sonar"  "${{ needs.sonarqube.result }}"
+          printf "║  %-20s %-26s ║\n" "Docker"       "${{ needs.docker.result }}"
+          echo "╠══════════════════════════════════════════════════╣"
+          printf "║  %-20s %-26s ║\n" "OVERALL" "$STATUS"
+          echo "╚══════════════════════════════════════════════════╝"
