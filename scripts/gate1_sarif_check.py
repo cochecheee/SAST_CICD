@@ -3,26 +3,29 @@
 Gate 1 — SARIF Threshold Check
 ================================
 Reads every *.sarif file under --sarif-dir, counts findings by severity, then:
-
-  CRITICAL > 0   → exit 1  (BLOCK pipeline)
-  HIGH     > 5   → exit 2  (WARNING; add --fail-on-high to also block)
+Evaluates against security-policy.yml or defaults.
 
 Writes a JSON summary to --output (default: gate1-result.json) that the
 notify.py script and the dashboard consume.
 
 Usage:
-  python scripts/gate1_sarif_check.py --sarif-dir reports/ [--fail-on-high] [--output path]
+  python scripts/gate1_sarif_check.py --sarif-dir reports/ [--policy security-policy.yml] [--output path]
 """
 
 import argparse
 import json
 import sys
+import yaml
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 
-# ── Thresholds ─────────────────────────────────────────────────────────────
-CRITICAL_THRESHOLD = 0   # any CRITICAL → block
-HIGH_THRESHOLD = 5       # more than 5 HIGH → warning (or block with --fail-on-high)
+# ── Default Thresholds (if no policy provided) ───────────────────────────
+DEFAULT_POLICIES = {
+    "CRITICAL": 0,
+    "HIGH": 5,
+    "MEDIUM": 10,
+    "LOW": 50
+}
 
 # ── SARIF level → internal severity ────────────────────────────────────────
 _LEVEL_MAP = {
@@ -116,11 +119,25 @@ def collect_findings(sarif_dir: str) -> Tuple[List[Path], List[Dict]]:
     return sarif_files, all_findings
 
 
+# ── Policy Loading ──────────────────────────────────────────────────────────
+
+def load_policy(policy_path: str) -> Dict[str, Any]:
+    if not policy_path or not Path(policy_path).exists():
+        return {"gate_rules": []}
+    
+    try:
+        with open(policy_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f).get("security_policy", {})
+    except Exception as e:
+        print(f"WARNING: Failed to load policy file {policy_path}: {e}", file=sys.stderr)
+        return {"gate_rules": []}
+
+
 # ── Gate evaluation ─────────────────────────────────────────────────────────
 
-def evaluate(findings: List[Dict], fail_on_high: bool) -> Tuple[bool, str, str]:
+def evaluate(findings: List[Dict], policy: Dict[str, Any]) -> Tuple[bool, str, str, List[str]]:
     """
-    Returns (passed: bool, decision: str, message: str).
+    Returns (passed: bool, decision: str, message: str, violations: List[str]).
     decision is one of: PASSED | WARNING | BLOCKED
     """
     counts = {sev: 0 for sev in SEVERITY_ORDER}
@@ -136,25 +153,43 @@ def evaluate(findings: List[Dict], fail_on_high: bool) -> Tuple[bool, str, str]:
     print(f"│  {'TOTAL':<10} {sum(counts.values()):>5}")
     print("└──────────────────────────────────────────────────────────┘")
 
-    # CRITICAL block
-    if counts["CRITICAL"] > CRITICAL_THRESHOLD:
-        msg = (
-            f"GATE 1 BLOCKED — {counts['CRITICAL']} CRITICAL finding(s) detected "
-            f"(threshold: {CRITICAL_THRESHOLD}). Pipeline cannot continue."
-        )
-        return False, "BLOCKED", msg
+    violations = []
+    is_blocked = False
+    is_warning = False
 
-    # HIGH warn/block
-    if counts["HIGH"] > HIGH_THRESHOLD:
-        base = f"{counts['HIGH']} HIGH finding(s) detected (threshold: {HIGH_THRESHOLD})."
-        if fail_on_high:
-            msg = f"GATE 1 BLOCKED — {base} --fail-on-high is set."
-            return False, "BLOCKED", msg
-        msg = f"GATE 1 WARNING — {base} Pipeline continues."
-        print(f"\n⚠  {msg}")
-        return True, "WARNING", msg
+    gate_rules = policy.get("gate_rules", [])
+    
+    # If no policy rules, use defaults
+    if not gate_rules:
+        for sev, threshold in DEFAULT_POLICIES.items():
+            if counts[sev] > threshold:
+                msg = f"{sev} threshold breach: {counts[sev]} > {threshold}"
+                violations.append(msg)
+                if sev in ["CRITICAL", "HIGH"]:
+                    is_blocked = True
+                else:
+                    is_warning = True
+    else:
+        for rule in gate_rules:
+            sev = rule.get("severity")
+            threshold = rule.get("threshold", 0)
+            action = rule.get("action", "BLOCK")
+            
+            if sev and sev in counts:
+                if counts[sev] > threshold:
+                    msg = f"{rule.get('name')}: {counts[sev]} {sev} finding(s) detected (threshold: {threshold})"
+                    violations.append(msg)
+                    if action == "BLOCK":
+                        is_blocked = True
+                    else:
+                        is_warning = True
 
-    return True, "PASSED", "GATE 1 PASSED — no blocking findings."
+    if is_blocked:
+        return False, "BLOCKED", f"GATE 1 BLOCKED — {', '.join(violations)}", violations
+    if is_warning:
+        return True, "WARNING", f"GATE 1 WARNING — {', '.join(violations)}", violations
+
+    return True, "PASSED", "GATE 1 PASSED — no blocking findings.", []
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────
@@ -165,14 +200,15 @@ def main() -> None:
     )
     parser.add_argument("--sarif-dir",   default="reports",
                         help="Root directory containing *.sarif files (searched recursively)")
-    parser.add_argument("--fail-on-high", action="store_true",
-                        help="Treat HIGH-threshold breach as a blocking failure")
+    parser.add_argument("--policy",      default=None,
+                        help="Path to security-policy.yml")
     parser.add_argument("--output",       default="gate1-result.json",
                         help="Path to write the JSON summary (consumed by notify.py)")
     args = parser.parse_args()
 
     _, all_findings = collect_findings(args.sarif_dir)
-    passed, decision, message = evaluate(all_findings, args.fail_on_high)
+    policy = load_policy(args.policy)
+    passed, decision, message, violations = evaluate(all_findings, policy)
 
     by_severity = {
         sev: sum(1 for f in all_findings if f["severity"] == sev)
@@ -184,6 +220,7 @@ def main() -> None:
         "passed":           passed,
         "decision":         decision,
         "message":          message,
+        "violations":       violations,
         "total_findings":   len(all_findings),
         "by_severity":      by_severity,
         "critical_findings": [
@@ -203,13 +240,6 @@ def main() -> None:
         sys.exit(0)
     else:
         print(f"\n✗  {message}\n", file=sys.stderr)
-        print("Critical findings:", file=sys.stderr)
-        for f in summary["critical_findings"]:
-            print(
-                f"  [{f['tool']}] {f['rule_id']}  @  {f['location']}\n"
-                f"    {f['message'][:160]}",
-                file=sys.stderr,
-            )
         sys.exit(1)
 
 
