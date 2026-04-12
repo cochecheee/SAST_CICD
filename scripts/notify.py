@@ -289,15 +289,26 @@ def _send_email(subject: str, html_body: str, plain_body: str) -> bool:
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER", "").strip()
     smtp_pass = os.environ.get("SMTP_PASS", "").strip()
-    from_addr = os.environ.get("EMAIL_FROM", smtp_user).strip() or smtp_user
+    from_addr = (os.environ.get("EMAIL_FROM", "").strip()
+                 or smtp_user
+                 or "ci-pipeline@noreply.local")
     to_raw    = os.environ.get("EMAIL_TO",  "").strip()
     cc_raw    = os.environ.get("EMAIL_CC",  "").strip()
 
+    # ── Pre-flight checks — skip gracefully instead of erroring ────────────
     if not smtp_host:
         print("  SMTP_HOST not set — skipping email notification.")
         return True
     if not to_raw:
         print("  EMAIL_TO not set — skipping email notification.")
+        return True
+    if not smtp_user or not smtp_pass:
+        print(
+            "  SMTP_USER / SMTP_PASS not set — skipping email notification.\n"
+            "  Hint: set SMTP_USER and SMTP_PASS secrets with your Mailtrap credentials.",
+            file=sys.stderr,
+        )
+        # Return True so a missing config does NOT fail the pipeline
         return True
 
     to_list = [e.strip() for e in to_raw.split(",")  if e.strip()]
