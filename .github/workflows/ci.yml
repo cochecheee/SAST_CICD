@@ -204,13 +204,16 @@ jobs:
         id: depcheck_cache_key
         run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
 
+      # v2 suffix busts pre-12.x H2 caches that have URL VARCHAR(1000),
+      # too narrow for modern CVE reference URLs (>1500 chars). Dep-Check
+      # 12.x widens the column but does NOT auto-migrate restored H2 files.
       - name: Cache NVD CVE database
         uses: actions/cache@v4
         with:
           path: ~/.gradle/dependency-check-data
-          key: depcheck-${{ runner.os }}-${{ steps.depcheck_cache_key.outputs.month }}
+          key: depcheck-v2-${{ runner.os }}-${{ steps.depcheck_cache_key.outputs.month }}
           restore-keys: |
-            depcheck-${{ runner.os }}-
+            depcheck-v2-${{ runner.os }}-
 
       - name: Run OWASP Dependency-Check
         env:
