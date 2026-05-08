@@ -7,9 +7,13 @@ import json
 import sys
 from pathlib import Path
 
+# SARIF level is a coarse 4-bucket display field; severity classification
+# happens via `properties.security-severity` (CVSS 0–10) which downstream
+# gates and SonarCloud both consume. Mapping HIGH→error caused gate1 to
+# count every HIGH CVE as CRITICAL.
 SEVERITY_TO_LEVEL = {
     "CRITICAL": "error",
-    "HIGH":     "error",
+    "HIGH":     "warning",
     "MEDIUM":   "warning",
     "LOW":      "note",
     "INFO":     "note",

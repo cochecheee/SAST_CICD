@@ -111,7 +111,7 @@ jobs:
         with:
           name: spotbugs-report
           path: build/reports/spotbugs/main.sarif
-          retention-days: 1
+          retention-days: 30
 
   # --- 2c. Semgrep (SAST, fast pattern-based) ---
   semgrep:
@@ -133,7 +133,7 @@ jobs:
         with:
           name: semgrep-report
           path: semgrep.sarif
-          retention-days: 1
+          retention-days: 30
 
   # --- 2d. CodeQL (deep semantic analysis) ---
   codeql:
@@ -195,14 +195,19 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # Cache keyed weekly so NVD data is refreshed at most once per week.
-      # If autoUpdate=false were used with an empty cache the scanner hangs;
-      # instead we let it update but reuse the cached DB when it is <24 h old.
+      # NVD download takes ~10–15 min on a cold cache. Key by ISO week so
+      # the cache hits for every run within the same week, and refreshes
+      # exactly once per week. (The previous key used github.run_id, which
+      # is unique per run → primary key never matched, cache always missed.)
+      - name: Compute weekly cache key
+        id: depcheck_cache_key
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
       - name: Cache NVD CVE database
         uses: actions/cache@v4
         with:
           path: ~/.gradle/dependency-check-data
-          key: depcheck-${{ runner.os }}-${{ github.run_id }}
+          key: depcheck-${{ runner.os }}-${{ steps.depcheck_cache_key.outputs.week }}
           restore-keys: |
             depcheck-${{ runner.os }}-
 
@@ -222,7 +227,7 @@ jobs:
           name: dep-check-report
           # SonarQube dependency-check plugin reads the JSON report
           path: build/reports/dependency-check-report.json
-          retention-days: 1
+          retention-days: 30
 
   # --- 2f. Trivy filesystem scan ---
   trivy-fs:
@@ -251,7 +256,7 @@ jobs:
         with:
           name: trivy-report
           path: trivy-fs.sarif
-          retention-days: 1
+          retention-days: 30
 
   # --- 2g. ESLint + security plugin (frontend JS) ---
   eslint:

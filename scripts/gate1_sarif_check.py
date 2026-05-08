@@ -27,14 +27,18 @@ DEFAULT_POLICIES = {
     "LOW": 50
 }
 
-# ── SARIF level → internal severity ────────────────────────────────────────
+# ── SARIF level → internal severity (fallback only) ────────────────────────
+# When `properties.security-severity` (CVSS 0–10) is present we prefer it.
+# Otherwise we fall back to this map. Note: SARIF `error` means HIGH for most
+# tools (Semgrep, CodeQL, SpotBugs) — NOT critical. CRITICAL is reserved for
+# CVSS ≥ 9.0 or explicit `critical`/`problem.severity=CRITICAL`.
 _LEVEL_MAP = {
-    "error":    "CRITICAL",
     "critical": "CRITICAL",
-    "warning":  "HIGH",
+    "error":    "HIGH",
     "high":     "HIGH",
-    "note":     "MEDIUM",
+    "warning":  "MEDIUM",
     "medium":   "MEDIUM",
+    "note":     "LOW",
     "low":      "LOW",
     "none":     "INFO",
     "info":     "INFO",
@@ -45,6 +49,44 @@ SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 
 def _map_level(level: str) -> str:
     return _LEVEL_MAP.get((level or "").strip().lower(), "MEDIUM")
+
+
+def _cvss_to_severity(score: float) -> str:
+    """CVSS v3 standard buckets."""
+    if score >= 9.0:
+        return "CRITICAL"
+    if score >= 7.0:
+        return "HIGH"
+    if score >= 4.0:
+        return "MEDIUM"
+    if score > 0.0:
+        return "LOW"
+    return "INFO"
+
+
+def _resolve_severity(result: Dict, rule: Dict, fallback_level: str) -> str:
+    """
+    Resolution order (most authoritative first):
+      1. result.properties.security-severity        (CVSS on the result)
+      2. rule.properties.security-severity          (CVSS on the rule)
+      3. rule.properties.problem.severity           (explicit CRITICAL/HIGH/...)
+      4. result.level / rule.defaultConfiguration.level (SARIF level fallback)
+    """
+    for src in (result.get("properties", {}), rule.get("properties", {})):
+        sev_str = src.get("security-severity")
+        if sev_str is not None:
+            try:
+                return _cvss_to_severity(float(sev_str))
+            except (TypeError, ValueError):
+                pass
+
+    problem_sev = rule.get("properties", {}).get("problem.severity")
+    if problem_sev:
+        mapped = _LEVEL_MAP.get(str(problem_sev).strip().lower())
+        if mapped:
+            return mapped
+
+    return _map_level(fallback_level)
 
 
 # ── SARIF parsing ───────────────────────────────────────────────────────────
@@ -65,21 +107,25 @@ def _parse_sarif(path: Path) -> List[Dict]:
                .get("driver", {})
                .get("name", "unknown")
         )
-        # Build rule-id → default level index for fallback
-        rules_index: Dict[str, str] = {}
+        # Index full rule objects so we can read properties.security-severity
+        rules_index: Dict[str, Dict] = {}
         for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
-            lvl = (
-                rule.get("defaultConfiguration", {})
-                    .get("level", "warning")
-            )
-            rules_index[rule.get("id", "")] = lvl
+            rules_index[rule.get("id", "")] = rule
+
+        # Some tools emit driver.rules as extensions
+        for ext in run.get("tool", {}).get("extensions", []) or []:
+            for rule in ext.get("rules", []) or []:
+                rules_index.setdefault(rule.get("id", ""), rule)
 
         for result in run.get("results", []):
             rule_id = result.get("ruleId", "")
+            rule = rules_index.get(rule_id, {})
 
-            # Prefer explicit level on result, fall back to rule default
-            level = result.get("level") or rules_index.get(rule_id, "warning")
-            severity = _map_level(level)
+            fallback_level = (
+                result.get("level")
+                or rule.get("defaultConfiguration", {}).get("level", "warning")
+            )
+            severity = _resolve_severity(result, rule, fallback_level)
 
             # Location
             locs = result.get("locations", [])
