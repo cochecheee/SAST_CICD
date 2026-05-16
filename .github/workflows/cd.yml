@@ -10,7 +10,9 @@ on:
 jobs:
   cd:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Allow-failure mode: deploy even if CI finished with failure (SAST gate breach).
+    # Skip only if CI was cancelled or skipped entirely.
+    if: ${{ github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped' }}
 
     steps:
       - name: Checkout repository

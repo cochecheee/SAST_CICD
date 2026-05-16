@@ -531,7 +531,10 @@ jobs:
     name: Docker Build & Push
     runs-on: ubuntu-latest
     needs: [sonarqube]
-    if: success()
+    # Allow-failure mode (defense demo): build/push image even if SAST gates failed.
+    # Findings still reach mcp via notify job; deployment proceeds for live demo.
+    # To restore block-on-critical behavior, change back to `if: success()`.
+    if: always()
     steps:
       - uses: actions/checkout@v4
 
