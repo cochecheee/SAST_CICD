@@ -1,11 +1,15 @@
 name: CD Workflow
 
+# CD temporarily set to MANUAL-ONLY (workflow_dispatch) so merging to main
+# does not auto-deploy while CD strategy is still being decided. To re-enable
+# auto-deploy on CI completion, uncomment the workflow_run block below.
 on:
-  workflow_run:
-    workflows: ["CI Workflow"]
-    types: [completed]
-    branches:
-      - main
+  workflow_dispatch:
+  # workflow_run:
+  #   workflows: ["CI Workflow"]
+  #   types: [completed]
+  #   branches:
+  #     - main
 
 jobs:
   cd:
