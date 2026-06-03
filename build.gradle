@@ -9,6 +9,14 @@ plugins {
 group = 'com.nhoclahola'
 version = '0.0.1-SNAPSHOT'
 
+// Spring Boot 2.7 BOM pins commons-lang3 to 3.12.0 and dependency-management
+// forces that onto the SpotBugs tool classpath too. SpotBugs 6.4.x bundles
+// BCEL 6.10, which calls org.apache.commons.lang3.SystemProperties#getJdkModulePath()
+// — a method only present from commons-lang3 3.18.0. Without this, spotbugsMain
+// crashes (NoClassDefFoundError / NoSuchMethodError) before any SARIF is written.
+// Bump the managed version so both the app and SpotBugs get a compatible one.
+ext['commons-lang3.version'] = '3.18.0'
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
