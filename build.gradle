@@ -2,7 +2,6 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '2.7.18'
     id 'io.spring.dependency-management' version '1.1.0'
-    id "org.sonarqube" version "5.1.0.4882"
     id "org.owasp.dependencycheck" version "12.1.9"
     id 'com.github.spotbugs' version '6.4.8'
 }
@@ -65,7 +64,7 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-// SpotBugs: don't fail the build, output SARIF for SonarCloud import
+// SpotBugs: don't fail the build, output SARIF for the SAST security gate
 spotbugs {
     ignoreFailures = true
 }

@@ -1,0 +1,764 @@
+name: CI Workflow
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  statuses: write      # needed by notify job to update PR commit status
+
+# env:
+#   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# ==============================================================================
+# PIPELINE FLOW  (triggers: push/PR → main, develop)
+#
+#   build
+#     └─> [semgrep | codeql | eslint | spotbugs | dependency-check | trivy-fs]  (parallel, timeout 15 min each)
+#               └─> sonarqube  (aggregate SARIF + Quality Gate — blocks on failure)
+#                       └─> docker  (build + Trivy image scan + push)
+#                               └─> notify  (update PR status + dispatch MCP Gateway webhook)
+#
+# Security gates (image3):
+#   Gate 1 — SARIF threshold : Critical > 0 → fail CI, High > 5 → warning
+#   Gate 2 — SonarCloud QG   : sonar.qualitygate.wait=true; fail if Security Rating < A
+#   Gate 3 — Branch protect  : require "CI / Security Gate" status check to pass
+#
+# Pass conditions  : no Critical finding, SonarCloud Rating = A, no CVE CVSS ≥ 9.0
+# Block conditions : any Critical finding | SonarCloud gate FAILED | dep-check CVSS ≥ 9.0
+# ==============================================================================
+
+jobs:
+
+  # ============================================================
+  # STAGE 1: BUILD
+  # Compile project, upload bytecode for downstream jobs
+  # ============================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Compile project 
+        run: ./gradlew clean compileJava --no-daemon -x test
+
+      - name: Upload compiled classes
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-classes
+          path: build/classes/java/main
+          retention-days: 1
+
+  # ============================================================
+  # STAGE 2: SAST SCANS (ALL RUN IN PARALLEL)
+  # ============================================================
+
+  # --- 2a. SpotBugs (bytecode-level bug analysis) ---
+  spotbugs:
+    name: SpotBugs
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Download compiled classes
+        uses: actions/download-artifact@v4
+        with:
+          name: build-classes
+          path: build/classes/java/main
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # SpotBugs must output SARIF for SonarQube to import.
+      # Requires com.github.spotbugs plugin >= 5.x and sarif output format configured in build.gradle:
+      #   spotbugs { reportLevel = 'high'; reports { sarif.enabled = true; xml.enabled = false } }
+      - name: Run SpotBugs
+        run: ./gradlew spotbugsMain --no-daemon -x test
+        continue-on-error: true
+
+      - name: Upload SpotBugs SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: build/reports/spotbugs/main.sarif
+          retention-days: 30
+
+  # --- 2c. Semgrep (SAST, fast pattern-based) ---
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep (SARIF output)
+        run: semgrep scan --config=auto --sarif --output=semgrep.sarif
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep.sarif
+          retention-days: 30
+
+  # --- 2d. CodeQL (deep semantic analysis) ---
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java
+
+      # Autobuild recompiles — needed for CodeQL tracing
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:java"
+          # 'upload: never' — keep SARIF local, pass to SonarCloud instead
+          # 'upload: false' in v3 still attempted a database upload; v4 + never stops it completely
+          upload: never
+          output: codeql-results
+        continue-on-error: true
+
+      - name: Upload CodeQL SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-report
+          path: codeql-results/java.sarif
+          retention-days: 30
+
+  # --- 2e. OWASP Dependency-Check (SCA) ---
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # NVD download takes ~10–15 min on a cold cache. Key by ISO week so
+      # the cache hits for every run within the same week, and refreshes
+      # cache hits for every run within the same month, refreshes monthly.
+      # nvd.api.validForHours=720 (30d) keeps Dep-Check from re-downloading
+      # NVD when the restored cache is recent.
+      - name: Compute monthly cache key
+        id: depcheck_cache_key
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
+      # v2 suffix busts pre-12.x H2 caches that have URL VARCHAR(1000),
+      # too narrow for modern CVE reference URLs (>1500 chars). Dep-Check
+      # 12.x widens the column but does NOT auto-migrate restored H2 files.
+      - name: Cache NVD CVE database
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/dependency-check-data
+          key: depcheck-v2-${{ runner.os }}-${{ steps.depcheck_cache_key.outputs.month }}
+          restore-keys: |
+            depcheck-v2-${{ runner.os }}-
+
+      - name: Run OWASP Dependency-Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          ./gradlew dependencyCheckAnalyze --no-daemon \
+            -Dnvd.api.key="${NVD_API_KEY}" \
+            -Dnvd.api.validForHours=720 \
+            -Dformats=JSON,HTML \
+            -DossindexAnalyzerEnabled=false \
+            -DnodeAuditAnalyzerEnabled=false \
+            -DnodeAnalyzerEnabled=false
+        continue-on-error: true
+
+      - name: Upload Dependency-Check JSON report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dep-check-report
+          # SonarQube dependency-check plugin reads the JSON report
+          path: build/reports/dependency-check-report.json
+          retention-days: 30
+
+  # --- 2f. Trivy filesystem scan ---
+  trivy-fs:
+    name: Trivy FS Scan
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Scanning the filesystem (not image) gives file-level location data
+      # that SonarQube can map back to source lines.
+      - name: Run Trivy FS scan (SARIF)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-fs.sarif
+          retention-days: 30
+
+  # --- 2g. ESLint + security plugin (frontend JS) ---
+  eslint:
+    name: ESLint Security
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install ESLint + security plugin
+        run: |
+          npm install --save-dev \
+            eslint \
+            eslint-plugin-security \
+            @microsoft/eslint-formatter-sarif
+
+      - name: Create ESLint config
+        run: |
+          cat > .eslintrc.json << 'EOF'
+          {
+            "plugins": ["security"],
+            "extends": ["plugin:security/recommended"],
+            "env": { "browser": true, "es2021": true },
+            "rules": {
+              "security/detect-eval-with-expression": "error",
+              "security/detect-non-literal-regexp": "warn",
+              "security/detect-object-injection": "warn",
+              "security/detect-unsafe-regex": "error"
+            }
+          }
+          EOF
+
+      - name: Run ESLint (SARIF output)
+        # Always write an empty SARIF first so the upload step never fails.
+        # The real scan overwrites it if JS files exist.
+        run: |
+          EMPTY_SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"ESLint","rules":[]}},"results":[]}]}'
+          echo "$EMPTY_SARIF" > eslint-results.sarif
+
+          JS_FILES=$(find src/main/resources/static -name "*.js" 2>/dev/null | head -50)
+          if [ -n "$JS_FILES" ]; then
+            npx eslint $JS_FILES \
+              --format @microsoft/eslint-formatter-sarif \
+              --output-file eslint-results.sarif || true
+          else
+            echo "No JS files found — keeping empty SARIF"
+          fi
+        continue-on-error: true
+
+      - name: Upload ESLint SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-report
+          path: eslint-results.sarif
+          retention-days: 30
+
+  # ============================================================
+  # STAGE 3: SECURITY GATES + SONARCLOUD
+  #
+  # Gate 1 (Python): SARIF threshold
+  #   CRITICAL > 0 → exit 1  (blocks this job; docker/notify still run)
+  #   HIGH     > 5 → warning  (add --fail-on-high to also block)
+  #
+  # Gate 2 (SonarCloud): sonar.qualitygate.wait=true
+  #   Fail if Security Rating < A or new Security Hotspot > 0
+  #   sonar.qualitygate.timeout=300 (treat timeout > 15 min as fail)
+  #
+  # Gate 3 (Branch protection): enforced by GitHub repo settings
+  #   Require status check "CI / Security Gate" (set in notify job)
+  #
+  # Required GitHub secrets:
+  #   SONAR_TOKEN        — SonarCloud user token
+  #   SONAR_ORGANIZATION — SonarCloud organization key
+  #   SONAR_PROJECT_KEY  — SonarCloud project key
+  # ============================================================
+  sonarqube:
+    name: Security Gates + SonarCloud
+    runs-on: ubuntu-latest
+    needs: [spotbugs, semgrep, codeql, dependency-check, trivy-fs, eslint]
+    # Run even if some scan jobs fail so partial data still reaches SonarCloud
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Setup Python (used for Gate 1 + dep-check conversion) ──────────
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      # ── Download all SARIF artifacts ────────────────────────────────────
+      - name: Download compiled classes
+        uses: actions/download-artifact@v4
+        with:
+          name: build-classes
+          path: build/classes/java/main
+
+      - name: Download SpotBugs report
+        uses: actions/download-artifact@v4
+        with:
+          name: spotbugs-report
+          path: reports/spotbugs
+        continue-on-error: true
+
+      - name: Download CodeQL report
+        uses: actions/download-artifact@v4
+        with:
+          name: codeql-report
+          path: reports/codeql
+        continue-on-error: true
+
+      - name: Download Semgrep report
+        uses: actions/download-artifact@v4
+        with:
+          name: semgrep-report
+          path: reports/semgrep
+        continue-on-error: true
+
+      - name: Download Trivy report
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-report
+          path: reports/trivy
+        continue-on-error: true
+
+      - name: Download Dependency-Check report
+        uses: actions/download-artifact@v4
+        with:
+          name: dep-check-report
+          path: reports/depcheck
+        continue-on-error: true
+
+      - name: Download ESLint report
+        uses: actions/download-artifact@v4
+        with:
+          name: eslint-report
+          path: reports/eslint
+        continue-on-error: true
+
+      # ── Convert Dependency-Check JSON → SARIF ───────────────────────────
+      - name: Convert Dependency-Check JSON to SARIF
+        run: |
+          if [ -f "reports/depcheck/dependency-check-report.json" ]; then
+            python scripts/depcheck_to_sarif.py \
+              --input  reports/depcheck/dependency-check-report.json \
+              --output reports/depcheck/dependency-check.sarif
+          else
+            echo "No dep-check report found, skipping conversion"
+          fi
+        continue-on-error: true
+
+      # ══════════════════════════════════════════════════════════════════
+      # GATE 1 — SARIF Threshold Check
+      # Scans all *.sarif files in reports/. Exits 1 if any CRITICAL
+      # finding is present (threshold=0). Exits 2 / continues if HIGH > 5.
+      # The JSON summary is uploaded as an artifact and consumed by the
+      # notify job to build the email and dashboard payload.
+      # ══════════════════════════════════════════════════════════════════
+      - name: "Gate 1 — SARIF Threshold"
+        id: gate1
+        run: |
+          POLICY_ARG=""
+          if [ -f "security-policy.yml" ]; then
+            POLICY_ARG="--policy security-policy.yml"
+          fi
+          python scripts/gate1_sarif_check.py \
+            --sarif-dir reports/ \
+            --output    gate1-result.json \
+            $POLICY_ARG
+        # Continue so we can upload the result + run Sonar even on failure.
+        # The overall job will still be marked failed by the exit code.
+        continue-on-error: true
+
+      - name: Upload Gate 1 result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate1-result-${{ github.run_number }}
+          path: gate1-result.json
+          retention-days: 30
+
+      - name: "Gate 1 — Enforce block"
+        # Re-fail the job if gate1 itself exited non-zero, AFTER uploading
+        # the artifact so the notify job always gets the result file.
+        if: steps.gate1.outcome == 'failure'
+        run: |
+          echo "::error::Gate 1 FAILED — critical or high-threshold breach detected."
+          echo "See gate1-result.json artifact for details."
+          exit 1
+
+      # ── Build list of available SARIF files for SonarCloud ─────────────
+      - name: Collect available SARIF paths
+        id: sarif_paths
+        run: |
+          SARIF_FILES=""
+          for f in \
+            reports/spotbugs/main.sarif \
+            reports/codeql/java.sarif \
+            reports/semgrep/semgrep.sarif \
+            reports/trivy/trivy-fs.sarif \
+            reports/eslint/eslint-results.sarif \
+            reports/depcheck/dependency-check.sarif; do
+            if [ -f "$f" ]; then
+              SARIF_FILES="${SARIF_FILES}${f},"
+            else
+              echo "WARNING: $f not found, skipping"
+            fi
+          done
+          SARIF_FILES="${SARIF_FILES%,}"
+          echo "paths=$SARIF_FILES" >> "$GITHUB_OUTPUT"
+          echo "Collected SARIF paths: $SARIF_FILES"
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Sonar scanner
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}-${{ hashFiles('**/build.gradle') }}
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # ══════════════════════════════════════════════════════════════════
+      # GATE 2 — SonarCloud Quality Gate
+      # sonar.qualitygate.wait=true  → blocks until gate result arrives.
+      # sonar.qualitygate.timeout=300 → fail if no result within 5 min
+      #   (image3: "scan timeout > 15 min → treat as fail").
+      # Gate fails when:  Security Rating < A  |  new Security Hotspot > 0
+      # ══════════════════════════════════════════════════════════════════
+      - name: "Gate 2 — SonarCloud Quality Gate"
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ./gradlew sonar --no-daemon \
+            -Dsonar.host.url="https://sonarcloud.io" \
+            -Dsonar.organization="${{ secrets.SONAR_ORGANIZATION }}" \
+            -Dsonar.projectKey="${{ secrets.SONAR_PROJECT_KEY }}" \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.java.binaries=build/classes/java/main \
+            -Dsonar.sarifReportPaths="${{ steps.sarif_paths.outputs.paths }}" \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
+
+  # ============================================================
+  # STAGE 4: DOCKER BUILD & PUSH
+  # Only runs after Sonar succeeds
+  # ============================================================
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [sonarqube]
+    # Allow-failure mode (defense demo): build/push image even if SAST gates failed.
+    # Findings still reach mcp via notify job; deployment proceeds for live demo.
+    # To restore block-on-critical behavior, change back to `if: success()`.
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest .
+
+      - name: Trivy container image scan (SARIF)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+          format: 'sarif'
+          output: 'trivy-image.sarif'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Trivy container image scan (JSON — full detail)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest'
+          format: 'json'
+          output: 'trivy-image.json'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
+
+      - name: Upload Trivy image scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-scan-${{ github.run_number }}
+          path: |
+            trivy-image.sarif
+            trivy-image.json
+          retention-days: 30
+
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/aloute-spring:latest
+
+  # ============================================================
+  # STAGE 5: NOTIFY & MCP TRIGGER
+  # Always runs regardless of upstream success/failure.
+  #
+  # Uses scripts/notify.py which sends to:
+  #   • Web Dashboard  → DASHBOARD_WEBHOOK_URL  (test: webhook.site)
+  #   • Email          → SMTP_*  / EMAIL_*      (test: Mailtrap.io)
+  #   • MCP Gateway    → MCP_GATEWAY_URL
+  #
+  # Gate 3 — Branch Protection:
+  #   Sets "CI / Security Gate" commit status on the PR head SHA.
+  #   Configure branch protection to require this check.
+  #
+  # All secrets are optional during testing — each channel skips
+  # gracefully when its env vars are absent.
+  # ============================================================
+  notify:
+    name: Notify & MCP Trigger
+    runs-on: ubuntu-latest
+    needs: [sonarqube, docker]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      # ── 1. Determine overall pipeline status ────────────────────────────
+      - name: Determine overall pipeline status
+        id: pipeline_status
+        run: |
+          SONAR="${{ needs.sonarqube.result }}"
+          DOCKER="${{ needs.docker.result }}"
+          if [ "$SONAR" = "success" ] && [ "$DOCKER" = "success" ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          elif [ "$SONAR" = "failure" ]; then
+            echo "status=gate_failed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 2. Write run-metadata.json ───────────────────────────────────────
+      - name: Write run metadata
+        run: |
+          python - << 'PYEOF'
+          import json, os
+          from datetime import datetime, timezone
+          meta = {
+              "run_id":          os.environ["GITHUB_RUN_ID"],
+              "run_number":      os.environ["GITHUB_RUN_NUMBER"],
+              "repository":      os.environ["GITHUB_REPOSITORY"],
+              "ref":             os.environ["GITHUB_REF"],
+              "sha":             os.environ["GITHUB_SHA"],
+              "actor":           os.environ["GITHUB_ACTOR"],
+              "event":           os.environ["GITHUB_EVENT_NAME"],
+              "pipeline_status": os.environ.get("PIPELINE_STATUS", "unknown"),
+              "timestamp":       datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          with open("run-metadata.json", "w") as f:
+              json.dump(meta, f, indent=2)
+          print(json.dumps(meta, indent=2))
+          PYEOF
+        env:
+          PIPELINE_STATUS: ${{ steps.pipeline_status.outputs.status }}
+
+      # ── 3. Download gate1 result (built in sonarqube job) ───────────────
+      - name: Download Gate 1 result
+        uses: actions/download-artifact@v4
+        with:
+          name: gate1-result-${{ github.run_number }}
+          path: .
+        continue-on-error: true
+
+      # ── 4. Upload run-metadata artifact ─────────────────────────────────
+      - name: Upload run metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-metadata-${{ github.run_number }}
+          path: run-metadata.json
+          retention-days: 30
+
+      # ── 5. Send notifications via notify.py ─────────────────────────────
+      #   Channel A: HTTP POST to DASHBOARD_WEBHOOK_URL
+      #              → test with https://webhook.site (free, no signup)
+      #   Channel B: HTML email via SMTP
+      #              → test with https://mailtrap.io  (free sandbox)
+      - name: "Send notifications (Dashboard + Email)"
+        env:
+          # --- Dashboard (webhook.site for testing) ---
+          DASHBOARD_WEBHOOK_URL: ${{ secrets.DASHBOARD_WEBHOOK_URL }}
+          DASHBOARD_TOKEN:       ${{ secrets.DASHBOARD_TOKEN }}
+          # --- Email (Mailtrap for testing) ---
+          SMTP_HOST:  ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:  ${{ secrets.SMTP_PORT }}
+          SMTP_USER:  ${{ secrets.SMTP_USER }}
+          SMTP_PASS:  ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO:   ${{ secrets.EMAIL_TO }}
+          EMAIL_CC:   ${{ secrets.EMAIL_CC }}
+        run: |
+          python scripts/notify.py \
+            --metadata run-metadata.json \
+            --gate1    gate1-result.json \
+            --status   "${{ steps.pipeline_status.outputs.status }}"
+        continue-on-error: true   # never block the pipeline on notification failure
+
+      # ── 6. MCP Gateway webhook ───────────────────────────────────────────
+      - name: Dispatch to MCP Gateway
+        env:
+          MCP_GATEWAY_URL:   ${{ secrets.MCP_GATEWAY_URL }}
+          MCP_WEBHOOK_TOKEN: ${{ secrets.MCP_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "${MCP_GATEWAY_URL}" ]; then
+            echo "MCP_GATEWAY_URL not set — skipping."
+            exit 0
+          fi
+          curl -f -s -X POST "${MCP_GATEWAY_URL}/webhook/pipeline-complete" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${MCP_WEBHOOK_TOKEN}" \
+            --max-time 20 \
+            -d @run-metadata.json \
+          && echo "MCP Gateway notified ✓" \
+          || echo "WARNING: MCP Gateway notification failed (non-blocking)"
+        continue-on-error: true
+
+      # ── 7. Gate 3 — Update PR commit status (Branch Protection) ─────────
+      - name: "Gate 3 — PR commit status"
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = "${{ steps.pipeline_status.outputs.status }}";
+            const descriptions = {
+              passed:      "All 3 security gates passed — safe to merge",
+              gate_failed: "Security Gate FAILED — critical findings or Quality Gate breach",
+              failed:      "Pipeline failed — check run log",
+            };
+            const state = (status === "passed") ? "success" : "failure";
+            await github.rest.repos.createCommitStatus({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              sha:         context.payload.pull_request.head.sha,
+              state,
+              description: descriptions[status] ?? status,
+              context:     "CI / Security Gate",
+              target_url:  `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${{ github.run_id }}`,
+            });
+            console.log(`Gate 3 — commit status: ${state}`);
+
+      # ── 8. Final summary ─────────────────────────────────────────────────
+      - name: Pipeline summary
+        if: always()
+        run: |
+          STATUS="${{ steps.pipeline_status.outputs.status }}"
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║        SECURITY PIPELINE SUMMARY                 ║"
+          echo "╠══════════════════════════════════════════════════╣"
+          printf "║  %-20s %-26s ║\n" "Repository"  "${{ github.repository }}"
+          printf "║  %-20s %-26s ║\n" "Branch"      "${GITHUB_REF#refs/heads/}"
+          printf "║  %-20s %-26s ║\n" "Commit"      "${GITHUB_SHA::8}"
+          printf "║  %-20s %-26s ║\n" "Run"         "#${{ github.run_number }}"
+          echo "╠══════════════════════════════════════════════════╣"
+          printf "║  %-20s %-26s ║\n" "SpotBugs"    "${{ needs.spotbugs.result }}"
+          printf "║  %-20s %-26s ║\n" "Semgrep"     "${{ needs.semgrep.result }}"
+          printf "║  %-20s %-26s ║\n" "CodeQL"      "${{ needs.codeql.result }}"
+          printf "║  %-20s %-26s ║\n" "Dep-Check"   "${{ needs.dependency-check.result }}"
+          printf "║  %-20s %-26s ║\n" "Trivy FS"    "${{ needs.trivy-fs.result }}"
+          printf "║  %-20s %-26s ║\n" "ESLint"      "${{ needs.eslint.result }}"
+          printf "║  %-20s %-26s ║\n" "Gate1+Sonar" "${{ needs.sonarqube.result }}"
+          printf "║  %-20s %-26s ║\n" "Docker"      "${{ needs.docker.result }}"
+          echo "╠══════════════════════════════════════════════════╣"
+          printf "║  %-20s %-26s ║\n" "OVERALL" "$STATUS"
+          echo "╚══════════════════════════════════════════════════╝"
