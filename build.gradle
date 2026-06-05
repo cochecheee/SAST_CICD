@@ -72,6 +72,13 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+// MapStruct emits "Unmapped target properties" compile warnings for DTO mappers
+// that intentionally map a subset of fields (UserMapper, CommentMapper, ...).
+// Silence them globally so the CodeQL autobuild log stays clean.
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ['-Amapstruct.unmappedTargetPolicy=IGNORE']
+}
+
 // SpotBugs: don't fail the build, output SARIF for the SAST security gate
 spotbugs {
     ignoreFailures = true
