@@ -25,11 +25,14 @@ jobs:
     uses: cochecheee/sast-action/.github/workflows/sast-ci.yml@master
     with:
       language: java
+      # V3.1 Tier 4 — id của project này trong MCP Gateway (ALO = project 2).
+      # Khi set, Security Gate hỏi /findings/gate-count (đã loại REVOKED) thay
+      # vì đếm raw SARIF → false-positive đã /revoke sẽ không chặn CI lần sau.
+      mcp_project_id: 2
       # ---- Gate knobs (defaults shown — uncomment to override) ----
       # gate_enabled: false          # bypass the gate entirely
       # gate_fail_on_critical: 1     # fail at >= N critical
       # gate_fail_on_high: 5         # fail at >= N high
-      # mcp_project_id: 0            # >0 → use chat-system REVOKED-excluded counts (V3.1)
     secrets:
       dashboard_url:   ${{ secrets.MCP_GATEWAY_URL }}    # MCP gateway (notify + gate-count)
       dashboard_token: ${{ secrets.MCP_WEBHOOK_TOKEN }}
