@@ -1,15 +1,15 @@
 name: CD Workflow
 
-# CD temporarily set to MANUAL-ONLY (workflow_dispatch) so merging to main
-# does not auto-deploy while CD strategy is still being decided. To re-enable
-# auto-deploy on CI completion, uncomment the workflow_run block below.
+# CD: auto-deploys on CI Workflow completion (workflow_run), in allow-failure
+# mode — deploys even when the security gate fails, so the deliberately-
+# vulnerable app stays live for the DAST/RCE demo. Also runnable manually.
 on:
   workflow_dispatch:
-  # workflow_run:
-  #   workflows: ["CI Workflow"]
-  #   types: [completed]
-  #   branches:
-  #     - main
+  workflow_run:
+    workflows: ["CI Workflow"]
+    types: [completed]
+    branches:
+      - main
 
 jobs:
   cd:
