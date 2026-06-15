@@ -22,7 +22,10 @@ permissions:
 
 jobs:
   security:
-    uses: cochecheee/sast-action/.github/workflows/sast-ci.yml@master
+    # TEMP — pinned to the exact decouple commit so DAST runs before the change
+    # lands on master (the gate-failing app needs the decoupled DAST job).
+    # Revert to @master after merging PR feat/per-project-dast.
+    uses: cochecheee/sast-action/.github/workflows/sast-ci.yml@0b4a2deb0df475b56b7dd2ce9d884a86483d8537
     with:
       language: java
       # V3.1 Tier 4 — id của project này trong MCP Gateway (ALO = project 2).
